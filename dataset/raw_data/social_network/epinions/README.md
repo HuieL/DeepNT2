@@ -1,4 +1,4 @@
-## Description
+## epinions
 The user's trust and distrust information is included in this dataset; users evaluate other users based on the quality of their reviews on the item.
 
 Column Details: 
@@ -11,6 +11,4 @@ Column Details:
     
     CREATION It is the date on which the trust was made 
     
-
-## Acknowledgement
 Raw data comes from `https://www.kaggle.com/datasets/masoud3/epinions-trust-network`
