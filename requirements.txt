@@ -7,3 +7,4 @@ python -c "import torch; print(torch.version.cuda)"
 
 pip install scamper-pywarts
 pip install torch_geometric
+pip install nodevectors
