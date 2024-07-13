@@ -11,7 +11,7 @@ Column Details:
 Raw data comes from `https://www.kaggle.com/datasets/masoud3/epinions-trust-network`
 
 ## twitter
-This dataset consists of 'circles' (or 'lists') from Twitter. Twitter data was crawled from public sources. The dataset includes node features (profiles), circles, and ego networks.
+This dataset consists of 'circles' (or 'lists') from Twitter. Twitter data was crawled from public sources. The dataset includes node features (profiles), circles, and ego networks. Graphs in this dataset are directed.
 
     nodeId.edges : The edges in the ego network for the node 'nodeId'. Edges are undirected for facebook, and directed (a follows b) for twitter and gplus. The 'ego' node does not appear, but it is assumed that they follow every node id that appears in this file.
     nodeId.circles : The set of circles for the ego node. Each line contains one circle, consisting of a series of node ids. The first entry in each line is the name of the circle.
@@ -21,3 +21,14 @@ This dataset consists of 'circles' (or 'lists') from Twitter. Twitter data was c
     This dataset consists of 'circles' (or 'lists') from Twitter. Twitter data was crawled from public sources. The dataset includes node features (profiles), circles, and ego networks.
 
 Raw data comes from `https://snap.stanford.edu/data/ego-Twitter.html`
+
+## facebook
+This dataset consists of 'circles' (or 'friends lists') from Facebook. Facebook data was collected from survey participants using Facebook app. The dataset includes node features (profiles), circles, and ego networks. Graphs in this dataset are undirected.
+
+    nodeId.edges : The edges in the ego network for the node 'nodeId'. Edges are undirected for facebook, and directed (a follows b) for twitter and gplus. The 'ego' node does not appear, but it is assumed that they follow every node id that appears in this file.
+    nodeId.circles : The set of circles for the ego node. Each line contains one circle, consisting of a series of node ids. The first entry in each line is the name of the circle.
+    nodeId.feat : The features for each of the nodes that appears in the edge file.
+    nodeId.egofeat : The features for the ego user.
+    nodeId.featnames : The names of each of the feature dimensions. Features are '1' if the user has this property in their profile, and '0' otherwise. This file has been anonymized for facebook users, since the names of the features would reveal private data.
+
+Raw data comes from `https://snap.stanford.edu/data/ego-Facebook.html`
