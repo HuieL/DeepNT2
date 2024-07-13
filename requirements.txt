@@ -6,3 +6,4 @@ python -c "import torch; print(torch.__version__)"
 python -c "import torch; print(torch.version.cuda)"
 
 pip install scamper-pywarts
+pip install torch_geometric
