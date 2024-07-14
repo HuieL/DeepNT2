@@ -9,6 +9,12 @@ import os
 import glob
 import argparse
 
+def set_random_seed(seed):
+    random.seed(seed)
+    np.random.seed(seed)
+    torch.manual_seed(seed)
+    torch.cuda.manual_seed_all(seed)
+
 def parse_tntp_file(file_path):
     edges = []
     edge_attrs = {
@@ -142,7 +148,8 @@ def walk_embeddings(walks, embedding_dim, num_epochs=5, batch_size=128, window_s
     embeddings = {vocab[i]: model.embeddings.weight[i].detach().numpy() for i in range(vocab_size)}
     return embeddings
 
-def create_embeddings(edges, nodes, embedding_type, embedding_dim, num_walks, walk_length):
+def create_embeddings(edges, nodes, embedding_type, embedding_dim, num_walks, walk_length, seed):
+    set_random_seed(seed)
     if embedding_type == 'binary':
         return create_binary_embeddings(nodes, embedding_dim)
     elif embedding_type == 'hope':
@@ -175,13 +182,15 @@ def create_pyg_graph(edges, edge_attrs, num_nodes, node_embeddings):
     
     return data, node_mapping
 
-def tntp_to_pyg(file_path, embedding_type, embedding_dim, num_walks, walk_length):
+def tntp_to_pyg(file_path, embedding_type, embedding_dim, num_walks, walk_length, seed):
+    set_random_seed(seed)
     edges, edge_attrs, num_nodes, nodes = parse_tntp_file(file_path)
-    node_embeddings = create_embeddings(edges, nodes, embedding_type, embedding_dim, num_walks, walk_length)
+    node_embeddings = create_embeddings(edges, nodes, embedding_type, embedding_dim, num_walks, walk_length, seed)
     graph, node_mapping = create_pyg_graph(edges, edge_attrs, num_nodes, node_embeddings)
     return graph, node_mapping
 
-def process_tntp_files(input_folder, output_folder, embedding_type='binary', embedding_dim=32, num_walks=10, walk_length=80):
+def process_tntp_files(input_folder, output_folder, embedding_type='binary', embedding_dim=32, num_walks=10, walk_length=80, seed=42):
+    set_random_seed(seed)
     os.makedirs(output_folder, exist_ok=True)
     
     # Get all .tntp files in the input folder
@@ -192,9 +201,10 @@ def process_tntp_files(input_folder, output_folder, embedding_type='binary', emb
         file_name = os.path.basename(file_path)
         name_without_ext = os.path.splitext(file_name)[0]
 
-        graph, _ = tntp_to_pyg(file_path, embedding_type, embedding_dim, num_walks, walk_length)
+        graph, _ = tntp_to_pyg(file_path, embedding_type, embedding_dim, num_walks, walk_length, seed)
         output_file = os.path.join(output_folder, f"{name_without_ext}.pt")
         torch.save(graph, output_file)
+        print(f"Processed and saved: {output_file}")
 
 
 def main():
@@ -212,11 +222,14 @@ def main():
                         help="Number of random walks per node (for randomwalk and deepwalk)")
     parser.add_argument("--walk_length", type=int, default=80,
                         help="Length of each random walk (for randomwalk and deepwalk)")
+    parser.add_argument("--seed", type=int, default=42,
+                        help="Random seed for reproducibility")
     
     args = parser.parse_args()
     
     process_tntp_files(args.input, args.output, args.embedding_type, 
-                       args.embedding_dim, args.num_walks, args.walk_length)
+                       args.embedding_dim, args.num_walks, args.walk_length, args.seed)
 
 if __name__ == "__main__":
     main()
+    
