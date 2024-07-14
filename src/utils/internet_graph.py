@@ -128,7 +128,7 @@ def walk_embeddings(walks, embedding_dim, num_epochs=5, batch_size=128, window_s
     embeddings = {vocab[i]: model.embeddings.weight[i].detach().numpy() for i in range(vocab_size)}
     return embeddings
 
-def hope_embeddings(G, dimensions=64):
+def hope_embeddings(G, dimensions):
     """
     HOPE (High-Order Proximity preserved Embeddings) 
     """
