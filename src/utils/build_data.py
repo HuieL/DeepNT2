@@ -122,7 +122,7 @@ def walk_embeddings(walks, embedding_dim, num_epochs=5, batch_size=128, window_s
             
             total_loss += loss.item()
         
-        print(f"Epoch {epoch+1}, Loss: {total_loss:.4f}")
+        # print(f"Epoch {epoch+1}, Loss: {total_loss:.4f}")
     
     # Extract embeddings
     embeddings = {vocab[i]: model.embeddings.weight[i].detach().numpy() for i in range(vocab_size)}
@@ -182,8 +182,6 @@ def warts_to_graph(warts_file, max_records=None, num_walks=10, walk_length=80, e
         embeddings = binary_coding_embeddings(G)
     else:
         raise ValueError("Invalid embedding type. Choose 'randomwalk', 'deepwalk', or 'binary'.")
-
-    print(f"Generated embeddings for {len(embeddings)} nodes")
 
     # Convert NetworkX graph to PyG Data
     pyg_graph = from_networkx(G)
