@@ -127,7 +127,27 @@ def walk_embeddings(walks, embedding_dim, num_epochs=5, batch_size=128, window_s
     # Extract embeddings
     embeddings = {vocab[i]: model.embeddings.weight[i].detach().numpy() for i in range(vocab_size)}
     return embeddings
+
+def hope_embeddings(G, dimensions=64):
+    """
+    HOPE (High-Order Proximity preserved Embeddings) 
+    """
+    A = nx.adjacency_matrix(G)
+    n = A.shape[0]
     
+    # Katz similarity as the high-order proximity
+    beta = 0.1  # decay factor
+    S = np.linalg.inv(np.eye(n) - beta * A.toarray()) - np.eye(n)
+    
+    # Perform SVD
+    u, s, vt = np.linalg.svd(S)
+    sqrt_s = np.sqrt(s[:dimensions])
+    X = u[:, :dimensions] * sqrt_s
+    Y = vt[:dimensions, :].T * sqrt_s
+    
+    embeddings = np.hstack([X, Y])
+    return {node: embeddings[i] for i, node in enumerate(G.nodes())}
+
 def binary_coding_embeddings(G):
      # Fixed 16-bit binary code
     embeddings = {}
@@ -139,7 +159,7 @@ def binary_coding_embeddings(G):
     
     return embeddings
 
-def warts_to_graph(warts_file, max_records=None, num_walks=10, walk_length=80, embedding_type='randomwalk', p=1, q=1, embedding_dim=64):
+def warts_to_graph(warts_file, max_records=None, num_walks=10, walk_length=512, embedding_type='randomwalk', p=1, q=1, embedding_dim=64):
     G = nx.DiGraph()
     node_mapping = {}  # Map IP addresses to integer indices
     node_counter = 0
@@ -180,8 +200,10 @@ def warts_to_graph(warts_file, max_records=None, num_walks=10, walk_length=80, e
         embeddings = walk_embeddings(walks, embedding_dim)
     elif embedding_type == 'binary':
         embeddings = binary_coding_embeddings(G)
+    elif embedding_type == 'hope':
+        embeddings = hope_embeddings(G, embedding_dim)
     else:
-        raise ValueError("Invalid embedding type. Choose 'randomwalk', 'deepwalk', or 'binary'.")
+        raise ValueError("Invalid embedding type. Choose 'randomwalk', 'deepwalk', 'hope', or 'binary'.")
 
     # Convert NetworkX graph to PyG Data
     pyg_graph = from_networkx(G)
@@ -204,4 +226,4 @@ def warts_to_graph(warts_file, max_records=None, num_walks=10, walk_length=80, e
 
 # Usage
 # warts_file = './topo-v6.l8.20240101.1704072990.hlz2-nz.warts'
-# pyg_data = warts_to_graph(warts_file, max_records=1000, num_walks=10, walk_length=80, embedding_type='deepwalk', embedding_dim=32)
+# pyg_data = warts_to_graph(warts_file, max_records=1000, num_walks=10, walk_length=512, embedding_type='deepwalk', embedding_dim=32)
