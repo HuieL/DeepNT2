@@ -127,6 +127,7 @@ def walk_embeddings(walks, embedding_dim, num_epochs=5, batch_size=128, window_s
     # Extract embeddings
     embeddings = {vocab[i]: model.embeddings.weight[i].detach().numpy() for i in range(vocab_size)}
     return embeddings
+    
 def binary_coding_embeddings(G):
      # Fixed 16-bit binary code
     embeddings = {}
@@ -138,7 +139,7 @@ def binary_coding_embeddings(G):
     
     return embeddings
 
-def warts_to_pyg(warts_file, max_records=None, num_walks=10, walk_length=80, embedding_type='randomwalk', p=1, q=1, embedding_dim=64):
+def warts_to_graph(warts_file, max_records=None, num_walks=10, walk_length=80, embedding_type='randomwalk', p=1, q=1, embedding_dim=64):
     G = nx.DiGraph()
     node_mapping = {}  # Map IP addresses to integer indices
     node_counter = 0
@@ -205,4 +206,4 @@ def warts_to_pyg(warts_file, max_records=None, num_walks=10, walk_length=80, emb
 
 # Usage
 # warts_file = './topo-v6.l8.20240101.1704072990.hlz2-nz.warts'
-# pyg_data = warts_to_pyg(warts_file, max_records=1000, num_walks=10, walk_length=80, embedding_type='deepwalk', embedding_dim=32)
+# pyg_data = warts_to_graph(warts_file, max_records=1000, num_walks=10, walk_length=80, embedding_type='deepwalk', embedding_dim=32)
