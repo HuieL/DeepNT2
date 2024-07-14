@@ -195,8 +195,8 @@ def process_tar_file(tar_path, output_dir, dataset_name, seed):
 def main():
     parser = argparse.ArgumentParser(description="Process social network data and compute path metrics")
     parser.add_argument("dataset_name", type=str, help="Name of the dataset ('facebook' or 'twitter")
-    parser.add_argument("--input", type=str, default=".dataset/raw_data/social_network", help="Directory containing the input tar.gz file")
-    parser.add_argument("--output", type=str, default=".dataset/processed_data/social_network", help="Directory to save processed data")
+    parser.add_argument("--input", type=str, default="./dataset/raw_data/social_network", help="Directory containing the input tar.gz file")
+    parser.add_argument("--output", type=str, default="./dataset/processed_data/social_network", help="Directory to save processed data")
     parser.add_argument("--seed", type=int, default=42, help="Random seed for reproducibility")
     
     args = parser.parse_args()
