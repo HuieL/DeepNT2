@@ -8,7 +8,8 @@ Run codes to process data to pyg Data:
 python tntp_to_pyg_converter.py
 
 # Social network:
-pending
+python process_social_network.py --input facebook 
+python process_social_network.py --input twitter
 
 # Computer network:
 pending
