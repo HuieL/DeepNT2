@@ -228,8 +228,6 @@ def warts_to_graph(warts_file, max_records, num_walks, walk_length, embedding_ty
     return pyg_graph
 
 def process_warts_files(input_dir, output_dir, max_records=None, num_walks=10, walk_length=512, embedding_type='randomwalk', p=1, q=1, embedding_dim=64):
-    os.makedirs(output_dir, exist_ok=True)
-
     for root, _, files in os.walk(input_dir):
         for file in tqdm(files, desc="Processing files"):
             if file.endswith('.warts'):
@@ -267,9 +265,11 @@ def main():
     parser.add_argument("--embedding_dim", type=int, default=32,
                         help="Dimension of node embeddings")
 
-    args = parser.parse_args()
-
-    process_warts_files(args.input, args.output, args.max_records, args.num_walks, 
+    input_dir = os.path.join(args.input, f"{args.dataset_name}")
+    output_dir = os.path.join(args.output, f"{args.dataset_name}")
+    os.makedirs(output_dir, exist_ok=True)
+    
+    process_warts_files(input_dir, output_dir, args.max_records, args.num_walks, 
                         args.walk_length, args.embedding_type, args.p, args.q, args.embedding_dim)
 
 if __name__ == "__main__":
