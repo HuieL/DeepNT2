@@ -49,7 +49,7 @@ def calculate_path_performance(G, path, metric):
         raise ValueError(f"Unsupported metric: {metric}")
     
 def best_performance_routing(G, source, target, metric):
-    if metric in ['delay', 'cost']:
+    if metric in ['delay', 'cost', 'rtt']:
         return nx.shortest_path(G, source, target, weight=metric)
     elif metric == 'reliability':
         return nx.shortest_path(G, source, target, weight=lambda u, v, d: -np.log(d['reliability']))
