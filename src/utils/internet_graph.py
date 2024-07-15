@@ -11,7 +11,7 @@ import torch.optim as optim
 import os
 import argparse
 from tqdm import tqdm
-from src.utils.split_with_monitors import generate_tomography_dataset
+from src.utils.split_with_monitors import generate_tomography_dataset, graph_to_pyg
 
 def random_walk(G, start_node, walk_length):
     walk = [start_node]
@@ -163,7 +163,7 @@ def binary_coding_embeddings(G):
     
     return embeddings
 
-def warts_to_graph(warts_file, max_records, num_walks, walk_length, embedding_type, p, q, embedding_dim):
+def warts_to_graph(warts_file, max_records, num_walks, walk_length, embedding_type, p, q, embedding_dim, monitor_rate):
     G = nx.DiGraph()
     node_mapping = {}  # Map IP addresses to integer indices
     node_counter = 0
@@ -196,8 +196,7 @@ def warts_to_graph(warts_file, max_records, num_walks, walk_length, embedding_ty
                 print(f"Error processing record: {e}")
                 continue
 
-    print(f"Graph created with {G.number_of_nodes()} nodes and {G.number_of_edges()} edges")
-
+    # print(f"Graph created with {G.number_of_nodes()} nodes and {G.number_of_edges()} edges")
     # Generate embeddings based on the selected type
     if embedding_type in ['randomwalk', 'deepwalk']:
         walks = generate_walks(G, num_walks, walk_length, embedding_type, p, q)
@@ -209,8 +208,18 @@ def warts_to_graph(warts_file, max_records, num_walks, walk_length, embedding_ty
     else:
         raise ValueError("Invalid embedding type. Choose 'randomwalk', 'deepwalk', 'hope', or 'binary'.")
 
-    # Convert NetworkX graph to PyG Data
-    pyg_graph = from_networkx(G)
+    # Select monitors 
+    num_monitors = int(G.number_of_nodes() * monitor_rate)
+    monitors = random.sample(list(G.nodes()), num_monitors)
+
+    # Generate tomography dataset
+    metrics = ['rtt']  # RTT for internet dataset
+    measurements_monitor, measurements_unknown, edge_index_monitor, edge_index_unknown, edge_attr_monitor, edge_attr_unknown = generate_tomography_dataset(G, monitors, metrics)
+
+    # Use graph_to_pyg() function to convert the graph to PyG format
+    pyg_graph = graph_to_pyg(G, monitors, measurements_monitor, measurements_unknown, 
+                             edge_index_monitor, edge_index_unknown, 
+                             edge_attr_monitor, edge_attr_unknown)
     
     # Add node embeddings as features
     node_features = torch.FloatTensor([embeddings[node] for node in G.nodes()])
@@ -222,13 +231,9 @@ def warts_to_graph(warts_file, max_records, num_walks, walk_length, embedding_ty
         node_ids[idx] = ip
     pyg_graph.node_ids = node_ids
 
-    # Convert edge attributes (RTT) to a tensor
-    edge_attr = torch.tensor([[e['rtt']] for e in G.edges.values()], dtype=torch.float)
-    pyg_graph.edge_attr = edge_attr
-
     return pyg_graph
 
-def process_warts_files(input_dir, output_dir, max_records=None, num_walks=10, walk_length=512, embedding_type='randomwalk', p=1, q=1, embedding_dim=64):
+def process_warts_files(input_dir, output_dir, max_records, num_walks, walk_length, embedding_type, p, q, embedding_dim, monitor_rate):
     for root, _, files in os.walk(input_dir):
         for file in tqdm(files, desc="Processing files"):
             if file.endswith('.warts'):
@@ -236,7 +241,7 @@ def process_warts_files(input_dir, output_dir, max_records=None, num_walks=10, w
                 output_path = os.path.join(output_dir, f"{os.path.splitext(file)[0]}.pt")
 
                 try:
-                    pyg_graph = warts_to_graph(input_path, max_records, num_walks, walk_length, embedding_type, p, q, embedding_dim)
+                    pyg_graph = warts_to_graph(input_path, max_records, num_walks, walk_length, embedding_type, p, q, embedding_dim, monitor_rate)
                     torch.save(pyg_graph, output_path)
                     print(f"Processed and saved: {output_path}")
                 except Exception as e:
@@ -265,13 +270,15 @@ def main():
                         help="In-out parameter for node2vec")
     parser.add_argument("--embedding_dim", type=int, default=32,
                         help="Dimension of node embeddings")
+    parser.add_argument("--monitor_rate", type=float, default=0.1,
+                        help="Ratio of nodes selected as monitors")
 
     input_dir = os.path.join(args.input, f"{args.dataset_name}")
     output_dir = os.path.join(args.output, f"{args.dataset_name}")
     os.makedirs(output_dir, exist_ok=True)
     
     process_warts_files(input_dir, output_dir, args.max_records, args.num_walks, 
-                        args.walk_length, args.embedding_type, args.p, args.q, args.embedding_dim)
+                        args.walk_length, args.embedding_type, args.p, args.q, args.embedding_dim, args.monitor_rate)
 
 if __name__ == "__main__":
     main()
