@@ -8,6 +8,9 @@ import random
 import numpy as np
 import torch.nn as nn
 import torch.optim as optim
+import os
+import argparse
+from tqdm import tqdm
 
 def random_walk(G, start_node, walk_length):
     walk = [start_node]
@@ -159,7 +162,7 @@ def binary_coding_embeddings(G):
     
     return embeddings
 
-def warts_to_graph(warts_file, max_records=None, num_walks=10, walk_length=512, embedding_type='randomwalk', p=1, q=1, embedding_dim=64):
+def warts_to_graph(warts_file, max_records, num_walks, walk_length, embedding_type, p, q, embedding_dim):
     G = nx.DiGraph()
     node_mapping = {}  # Map IP addresses to integer indices
     node_counter = 0
@@ -224,6 +227,50 @@ def warts_to_graph(warts_file, max_records=None, num_walks=10, walk_length=512, 
 
     return pyg_graph
 
-# Usage
-# warts_file = './topo-v6.l8.20240101.1704072990.hlz2-nz.warts'
-# pyg_data = warts_to_graph(warts_file, max_records=1000, num_walks=10, walk_length=512, embedding_type='deepwalk', embedding_dim=32)
+def process_warts_files(input_dir, output_dir, max_records=None, num_walks=10, walk_length=512, embedding_type='randomwalk', p=1, q=1, embedding_dim=64):
+    os.makedirs(output_dir, exist_ok=True)
+
+    for root, _, files in os.walk(input_dir):
+        for file in tqdm(files, desc="Processing files"):
+            if file.endswith('.warts'):
+                input_path = os.path.join(root, file)
+                output_path = os.path.join(output_dir, f"{os.path.splitext(file)[0]}.pt")
+
+                try:
+                    pyg_graph = warts_to_graph(input_path, max_records, num_walks, walk_length, embedding_type, p, q, embedding_dim)
+                    torch.save(pyg_graph, output_path)
+                    print(f"Processed and saved: {output_path}")
+                except Exception as e:
+                    print(f"Error processing {input_path}: {e}")
+
+
+def main():
+    parser = argparse.ArgumentParser(description="Convert WARTS files to PyG graphs")
+    parser.add_argument("--input", type=str, default="./dataset/raw_data/internet/ipv6_probe",
+                        help="Input folder containing WARTS files")
+    parser.add_argument("--output", type=str, default="./dataset/processed_data/internet/ipv6_probe",
+                        help="Output folder for processed PyG graphs")
+    parser.add_argument("--max_records", type=int, default=1000,
+                        help="Maximum number of records to process per file (default: all)")
+    parser.add_argument("--num_walks", type=int, default=10,
+                        help="Number of random walks per node")
+    parser.add_argument("--walk_length", type=int, default=512,
+                        help="Length of each random walk")
+    parser.add_argument("--embedding_type", type=str, default="randomwalk",
+                        choices=["randomwalk", "deepwalk", "hope", "binary"],
+                        help="Type of node embedding to use")
+    parser.add_argument("--p", type=float, default=1,
+                        help="Return parameter for node2vec")
+    parser.add_argument("--q", type=float, default=1,
+                        help="In-out parameter for node2vec")
+    parser.add_argument("--embedding_dim", type=int, default=32,
+                        help="Dimension of node embeddings")
+
+    args = parser.parse_args()
+
+    process_warts_files(args.input, args.output, args.max_records, args.num_walks, 
+                        args.walk_length, args.embedding_type, args.p, args.q, args.embedding_dim)
+
+if __name__ == "__main__":
+    main()
+    
