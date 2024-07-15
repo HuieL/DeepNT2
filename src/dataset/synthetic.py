@@ -7,7 +7,7 @@ import random
 import heapq
 from tqdm import tqdm
 import ipdb
-from src.dataset.utils.split_with_monitors import generate_tomography_dataset, graph_to_pyg
+from src.utils.split_with_monitors import generate_tomography_dataset, graph_to_pyg
 
 def generate_connected_erdos_renyi_network(num_nodes, probability, seed=None):
     if seed is not None:
