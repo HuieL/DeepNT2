@@ -37,7 +37,7 @@ def maximum_bandwidth_path(G, source, target):
 def calculate_path_performance(G, path, metric):
     if path is None:
         return None
-    if metric in ['delay', 'cost']:
+    if metric in ['delay', 'cost', 'rtt':
         return sum(G[u][v][metric] for u, v in zip(path[:-1], path[1:]))
     elif metric == 'reliability':
         return np.prod([G[u][v][metric] for u, v in zip(path[:-1], path[1:])])
