@@ -7,6 +7,7 @@ import random
 import heapq
 from tqdm import tqdm
 
+
 def maximum_bandwidth_path(G, source, target):
     def dijkstra_max_bandwidth(G, source, target):
         bandwidth = {source: float('inf')}
@@ -65,47 +66,85 @@ def best_performance_routing(G, source, target, metric):
 
 
 def generate_tomography_dataset(G, monitors, metrics):
-    measurements_monitor = {}
-    measurements_unknown = {}
-    edge_index_monitor = []
-    edge_index_unknown = []
+    measurements_monitor = {metric: {} for metric in metrics}
+    measurements_unknown = {metric: {} for metric in metrics}
+    edge_index_monitor = {metric: set() for metric in metrics}
+    edge_index_unknown = {metric: set() for metric in metrics}
     edge_attr_monitor = {metric: [] for metric in metrics}
     edge_attr_unknown = {metric: [] for metric in metrics}
     
     nodes = list(G.nodes())
+    monitor_set = set(monitors)
+    monitor_to_index = {monitor: idx for idx, monitor in enumerate(monitors)}
     
-    for i, source in enumerate(tqdm(monitors, desc="Processing monitors")):
-        for j, target in enumerate(nodes):
+    for source in tqdm(monitors, desc="Processing monitors"):
+        for target in nodes:
             if source != target:
                 for metric in metrics:
                     try:
                         path = best_performance_routing(G, source, target, metric)
                         if path is not None:
                             performance = calculate_path_performance(G, path, metric)
-                            if target in monitors:
-                                measurements_monitor[(source, target, metric)] = performance
-                                edge_index_monitor.append([i, j])
+                            if target in monitor_set:
+                                measurements_monitor[metric][(source, target)] = performance
+                                edge_index_monitor[metric].add((monitor_to_index[source], monitor_to_index[target]))
                                 edge_attr_monitor[metric].append(performance)
                             else:
-                                measurements_unknown[(source, target, metric)] = performance
-                                edge_index_unknown.append([i, j])
+                                measurements_unknown[metric][(source, target)] = performance
+                                edge_index_unknown[metric].add((monitor_to_index[source], nodes.index(target)))
                                 edge_attr_unknown[metric].append(performance)
-                        else:
-                            if target in monitors:
-                                measurements_monitor[(source, target, metric)] = np.nan
-                            else:
-                                measurements_unknown[(source, target, metric)] = np.nan
                     except nx.NetworkXNoPath:
-                        if target in monitors:
-                            measurements_monitor[(source, target, metric)] = np.nan
+                        if target in monitor_set:
+                            measurements_monitor[metric][(source, target)] = np.nan
                         else:
-                            measurements_unknown[(source, target, metric)] = np.nan
+                            measurements_unknown[metric][(source, target)] = np.nan
 
-    return measurements_monitor, measurements_unknown, edge_index_monitor, edge_index_unknown, edge_attr_monitor, edge_attr_unknown
+    return (measurements_monitor, measurements_unknown, 
+            {m: list(e) for m, e in edge_index_monitor.items()}, 
+            {m: list(e) for m, e in edge_index_unknown.items()}, 
+            edge_attr_monitor, edge_attr_unknown)
+
+def graph_to_pyg(G, monitors, measurements_monitor, measurements_unknown, edge_index_monitor, edge_index_unknown, edge_attr_monitor, edge_attr_unknown):
+    num_nodes = G.number_of_nodes()
+    num_monitors = len(monitors)
+    
+    data = Data()
+    data.num_nodes = num_nodes
+    data.num_monitors = num_monitors
+    
+    # Original graph structure
+    data.edge_index = torch.tensor(list(G.edges())).t().contiguous()
+    
+    # Monitor paths (training data)
+    data.edge_index_monitor = {
+        metric: torch.tensor(edges).t().contiguous()
+        for metric, edges in edge_index_monitor.items()}
+    
+    # Unknown paths (test data)
+    data.edge_index_unknown = {
+        metric: torch.tensor(edges).t().contiguous()
+        for metric, edges in edge_index_unknown.items()}
+    
+    # Metrics
+    data.metrics_monitor = {
+        metric: torch.tensor(values, dtype=torch.float) 
+        for metric, values in edge_attr_monitor.items()}
+    
+    data.metrics_monitor = {
+        metric: torch.tensor(values, dtype=torch.float) 
+        for metric, values in edge_attr_unknown.items()}
+    
+    # Store measurements
+    data.measurements_monitor = measurements_monitor
+    data.measurements_unknown = measurements_unknown
+    
+    return data
 
 
-# Use_example
+# Usage example:
 # metrics = ['delay', 'cost', 'reliability', 'bandwidth', 'is_secure']
 # monitors = random.sample(list(G.nodes()), num_monitors)
 
 # measurements_monitor, measurements_unknown, edge_index_monitor, edge_index_unknown, edge_attr_monitor, edge_attr_unknown = generate_tomography_dataset(G, monitors, metrics)
+# data = graph_to_pyg(G, monitors, measurements_monitor, measurements_unknown, edge_index_monitor, edge_index_unknown, edge_attr_monitor, edge_attr_unknown)
+
