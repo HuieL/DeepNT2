@@ -11,6 +11,7 @@ import torch.optim as optim
 import os
 import argparse
 from tqdm import tqdm
+from src.utils.split_with_monitors import generate_tomography_dataset
 
 def random_walk(G, start_node, walk_length):
     walk = [start_node]
