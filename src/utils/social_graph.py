@@ -7,8 +7,29 @@ import re
 import networkx as nx
 import argparse
 import random
+from tqdm import tqdm
 from src.utils.split_with_monitors import generate_tomography_dataset, graph_to_pyg
 
+def initialize_edge_metrics(G, seed):
+    np.random.seed(seed)
+    metrics = ['delay', 'interaction_frequency', 'social_distance', 'trust_decay', 'information_fidelity']
+    
+    # Compute node centralities for social distance
+    centrality = nx.eigenvector_centrality(G)
+    
+    for u, v in G.edges():
+        G[u][v]['delay'] = np.random.uniform(0.1, 1.0)
+        G[u][v]['interaction_frequency'] = np.random.uniform(0.1, 1.0)
+        G[u][v]['social_distance'] = abs(centrality[u] - centrality[v]) # Given by raw_data;
+        G[u][v]['trust_decay'] = np.random.uniform(0.8, 1.0)
+        G[u][v]['information_fidelity'] = np.random.uniform(0.9, 1.0)
+    
+    # Ensure symmetry for undirected graph
+    for u, v in G.edges():
+        for metric in metrics:
+            G[v][u][metric] = G[u][v][metric]
+    
+    return metrics
 
 def read_edges(file_content):
     edges = []
@@ -51,60 +72,7 @@ def read_featnames(file_content):
 def read_ego_features(file_content):
     return list(map(int, file_content.decode().strip().split()))
 
-def compute_path_metrics(G, seed):
-    """
-    Compute path-based metrics that satisfy additive or multiplicative properties.
-    """
-    np.random.seed(seed)
-    metrics = {
-        'delay': {},
-        'trust_decay': {},
-        'bandwidth': {},
-        'information_fidelity': {},
-        'social_distance': {},
-        'interaction_frequency': {}
-    }
-    
-    # Compute node centralities for social distance
-    centrality = nx.eigenvector_centrality(G)
-    
-    # Assign base values to edges
-    for u, v in G.edges():
-        metrics['propagation_delay'][(u, v)] = np.random.uniform(0.5, 1.5)
-        metrics['trust_decay'][(u, v)] = np.random.uniform(0.8, 1.0)
-        metrics['inverse_bandwidth'][(u, v)] = np.random.uniform(0.1, 1.0)
-        metrics['information_fidelity'][(u, v)] = np.random.uniform(0.9, 1.0)
-        metrics['social_distance'][(u, v)] = abs(centrality[u] - centrality[v])
-        metrics['inverse_interaction_frequency'][(u, v)] = np.random.uniform(0.1, 1.0)
-    
-    # Ensure symmetry for undirected graph
-    for metric in metrics.values():
-        for (u, v) in list(metric.keys()):
-            metric[(v, u)] = metric[(u, v)]
-    
-    # Verify and adjust additive metrics
-    additive_metrics = ['propagation_delay', 'inverse_bandwidth', 'social_distance', 'inverse_interaction_frequency']
-    for metric_name in additive_metrics:
-        for path in nx.all_pairs_dijkstra_path(G):
-            for i in range(len(path) - 2):
-                for j in range(i + 2, len(path)):
-                    direct = metrics[metric_name].get((path[i], path[j]), float('inf'))
-                    indirect = sum(metrics[metric_name][(path[k], path[k+1])] for k in range(i, j))
-                    metrics[metric_name][(path[i], path[j])] = metrics[metric_name][(path[j], path[i])] = min(direct, indirect)
-    
-    # Verify and adjust multiplicative metrics
-    multiplicative_metrics = ['trust_decay', 'information_fidelity']
-    for metric_name in multiplicative_metrics:
-        for path in nx.all_pairs_dijkstra_path(G):
-            for i in range(len(path) - 2):
-                for j in range(i + 2, len(path)):
-                    direct = metrics[metric_name].get((path[i], path[j]), 0)
-                    indirect = np.prod([metrics[metric_name][(path[k], path[k+1])] for k in range(i, j)])
-                    metrics[metric_name][(path[i], path[j])] = metrics[metric_name][(path[j], path[i])] = max(direct, indirect)
-    
-    return metrics
-
-def process_ego_network(tar, ego_id, dataset_name, seed):
+def process_ego_network(tar, ego_id, dataset_name, seed, monitor_rate):
     random.seed(seed)
     np.random.seed(seed)
     torch.manual_seed(seed)
@@ -133,8 +101,15 @@ def process_ego_network(tar, ego_id, dataset_name, seed):
     node_mapping = {node: i for i, node in enumerate(original_nodes)}
     reverse_mapping = {i: node for node, i in node_mapping.items()}
     
-    # Compute path metrics
-    edge_metrics = compute_path_metrics(G, seed)
+    # Initialize edge metrics
+    metrics = initialize_edge_metrics(G, seed)
+    
+    # Select monitors
+    num_monitors = int(G.number_of_nodes() * monitor_rate)
+    monitors = random.sample(list(G.nodes()), num_monitors)
+    
+    # Generate tomography dataset
+    measurements_monitor, measurements_unknown, edge_index_monitor, edge_index_unknown, edge_attr_monitor, edge_attr_unknown = generate_tomography_dataset(G, monitors, metrics)
     
     # Prepare node features
     num_nodes = len(G.nodes())
@@ -148,30 +123,18 @@ def process_ego_network(tar, ego_id, dataset_name, seed):
     # Add ego features
     x[node_mapping[ego_node]] = torch.tensor(ego_features, dtype=torch.float)
     
-    # Prepare edge index and edge attributes
-    edge_index = []
-    edge_attr = {metric: [] for metric in edge_metrics.keys()}
+    # Use graph_to_pyg to convert the graph to PyG format
+    data = graph_to_pyg(G, monitors, measurements_monitor, measurements_unknown, 
+                        edge_index_monitor, edge_index_unknown, 
+                        edge_attr_monitor, edge_attr_unknown)
     
-    for u, v in G.edges():
-        edge_index.append([node_mapping[u], node_mapping[v]])
-        edge_index.append([node_mapping[v], node_mapping[u]])  # Add reverse edge for undirected graph
-        for metric, values in edge_metrics.items():
-            edge_attr[metric].append(values[(u, v)])
-            edge_attr[metric].append(values[(v, u)])  # Add value for reverse edge
-    
-    edge_index = torch.tensor(edge_index, dtype=torch.long).t().contiguous()
-    
-    # Create PyG Data object
-    data = Data(x=x, edge_index=edge_index)
+    # Add node features and ego node information
+    data.x = x
     data.ego_node = node_mapping[ego_node]
-    
-    # Add each metric as a separate edge attribute
-    for metric_name, metric_values in edge_attr.items():
-        setattr(data, f'edge_{metric_name}', torch.tensor(metric_values, dtype=torch.float))
     
     return data, node_mapping, featnames
 
-def process_tar_file(tar_path, output_dir, dataset_name, seed):
+def process_tar_file(tar_path, output_dir, dataset_name, seed, monitor_rate):
     with tarfile.open(tar_path, 'r:gz') as tar:
         ego_ids = set()
         for member in tar.getmembers():
@@ -182,9 +145,8 @@ def process_tar_file(tar_path, output_dir, dataset_name, seed):
         
         print(f"Found {len(ego_ids)} ego networks in the {dataset_name} dataset")
         
-        for ego_id in ego_ids:
-            print(f"Processing ego network {ego_id}")
-            result = process_ego_network(tar, ego_id, dataset_name, seed)
+        for ego_id in tqdm(ego_ids, desc="Processing ego networks"):
+            result = process_ego_network(tar, ego_id, dataset_name, seed, monitor_rate)
             if result is not None:
                 data, _, _ = result
                 output_path = os.path.join(output_dir, f"{dataset_name}_ego_net_{ego_id}.pt")
@@ -192,13 +154,13 @@ def process_tar_file(tar_path, output_dir, dataset_name, seed):
             else:
                 print(f"Skipping ego network {ego_id} due to processing error")
 
-
 def main():
     parser = argparse.ArgumentParser(description="Process social network data and compute path metrics")
-    parser.add_argument("dataset_name", type=str, help="Name of the dataset ('facebook' or 'twitter")
+    parser.add_argument("dataset_name", type=str, help="Name of the dataset ('facebook' or 'twitter')")
     parser.add_argument("--input", type=str, default="./dataset/raw_data/social_network", help="Directory containing the input tar.gz file")
     parser.add_argument("--output", type=str, default="./dataset/processed_data/social_network", help="Directory to save processed data")
     parser.add_argument("--seed", type=int, default=42, help="Random seed for reproducibility")
+    parser.add_argument("--monitor_rate", type=float, default=0.1, help="Ratio of nodes to be selected as monitors")
     
     args = parser.parse_args()
     
@@ -206,8 +168,7 @@ def main():
     output_dir = os.path.join(args.output, f"{args.dataset_name}")
     os.makedirs(output_dir, exist_ok=True)
     
-    process_tar_file(tar_path, output_dir, args.dataset_name, args.seed)
+    process_tar_file(tar_path, output_dir, args.dataset_name, args.seed, args.monitor_rate)
 
 if __name__ == "__main__":
     main()
-
