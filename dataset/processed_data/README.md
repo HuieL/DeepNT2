@@ -5,11 +5,11 @@ We build up graphs with `torch_geometric.data.Data`.
 Run codes to process data to pyg Data:
 ```
 # Transportation network:
-python tntp_to_pyg_converter.py
+python src/dataset/transportation.py
 
 # Social network:
-python process_social_network.py --input facebook 
-python process_social_network.py --input twitter
+python src/dataset/social.py --input facebook 
+python src/dataset/social.py --input twitter
 
 # Computer network:
 pending
