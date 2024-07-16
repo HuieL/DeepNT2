@@ -273,6 +273,8 @@ def main():
     parser.add_argument("--monitor_rate", type=float, default=0.1,
                         help="Ratio of nodes selected as monitors")
 
+    args = parser.parse_args()
+
     input_dir = os.path.join(args.input, f"{args.dataset_name}")
     output_dir = os.path.join(args.output, f"{args.dataset_name}")
     os.makedirs(output_dir, exist_ok=True)
