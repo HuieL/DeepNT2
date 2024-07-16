@@ -224,7 +224,7 @@ def process_tntp_files(input_folder, output_folder, embedding_type, embedding_di
         file_name = os.path.basename(file_path)
         name_without_ext = os.path.splitext(file_name)[0]
 
-        output_file = os.path.join(output_folder, f"{name_without_ext}_{embedding_type}_{monitor_rate}.pt")
+        output_file = os.path.join(output_folder, f"{name_without_ext}_{monitor_rate}_{embedding_type}.pt")
         if os.path.exists(output_file):
             print(f"Cached: {output_file}")
             continue
