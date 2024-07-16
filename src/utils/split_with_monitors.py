@@ -37,11 +37,11 @@ def maximum_bandwidth_path(G, source, target):
 def calculate_path_performance(G, path, metric):
     if path is None:
         return None
-    if metric in ['delay', 'cost', 'rtt', 'interaction_frequency', 'social_distance']:
+    if metric in ['delay', 'cost', 'rtt', 'interaction_frequency', 'social_distance', 'length', 'flow_time']:
         return sum(G[u][v][metric] for u, v in zip(path[:-1], path[1:]))
     elif metric in ['reliability', 'trust_decay', 'information_fidelity']:
         return np.prod([G[u][v][metric] for u, v in zip(path[:-1], path[1:])])
-    elif metric == 'bandwidth':
+    elif metric in ['bandwidth', 'capacity']:
         return min(G[u][v][metric] for u, v in zip(path[:-1], path[1:]))
     elif metric == 'is_secure':
         return all(G[u][v][metric] for u, v in zip(path[:-1], path[1:]))
@@ -49,11 +49,11 @@ def calculate_path_performance(G, path, metric):
         raise ValueError(f"Unsupported metric: {metric}")
     
 def best_performance_routing(G, source, target, metric):
-    if metric in ['delay', 'cost', 'rtt', 'interaction_frequency', 'social_distance']:
+    if metric in ['delay', 'cost', 'rtt', 'interaction_frequency', 'social_distance', 'length', 'flow_time']:
         return nx.shortest_path(G, source, target, weight=metric)
     elif metric in ['reliability', 'trust_decay', 'information_fidelity']:
         return nx.shortest_path(G, source, target, weight=lambda u, v, d: -np.log(d['reliability']))
-    elif metric == 'bandwidth':
+    elif metric in ['bandwidth', 'capacity']:
         return maximum_bandwidth_path(G, source, target)
     elif metric == 'is_secure':
         secure_graph = nx.Graph((u, v, d) for (u, v, d) in G.edges(data=True) if d['is_secure'])
