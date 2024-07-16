@@ -57,12 +57,12 @@ def compute_path_metrics(G, seed):
     """
     np.random.seed(seed)
     metrics = {
-        'propagation_delay': {},
+        'delay': {},
         'trust_decay': {},
-        'inverse_bandwidth': {},
+        'bandwidth': {},
         'information_fidelity': {},
         'social_distance': {},
-        'inverse_interaction_frequency': {}
+        'interaction_frequency': {}
     }
     
     # Compute node centralities for social distance
