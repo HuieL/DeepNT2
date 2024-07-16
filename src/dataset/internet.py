@@ -251,9 +251,9 @@ def process_warts_files(input_dir, output_dir, max_records, num_walks, walk_leng
 def main():
     parser = argparse.ArgumentParser(description="Convert WARTS files to PyG graphs")
     parser.add_argument("--dataset_name", type=str, choices=["ipv4_probe", "ipv6_probe"])
-    parser.add_argument("--input", type=str, default=f"./dataset/raw_data/internet/{dataset_name}",
+    parser.add_argument("--input", type=str, default=f"./dataset/raw_data/internet",
                         help="Input folder containing WARTS files")
-    parser.add_argument("--output", type=str, default=f"./dataset/processed_data/internet/{dataset_name}",
+    parser.add_argument("--output", type=str, default=f"./dataset/processed_data/internet",
                         help="Output folder for processed PyG graphs")
     parser.add_argument("--max_records", type=int, default=1000,
                         help="Maximum number of records to process per file (default: all)")
