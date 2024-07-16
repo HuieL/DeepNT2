@@ -22,7 +22,7 @@ def maximum_bandwidth_path(G, source, target):
                 return path[node], bandwidth[node]
             
             for neighbor in G.neighbors(node):
-                edge_bw = G[node][neighbor]['bandwidth']
+                edge_bw = G[node][neighbor].get('bandwidth', G[node][neighbor].get('capacity', 0))
                 new_bw = min(bw, edge_bw)
                 if new_bw > bandwidth.get(neighbor, 0):
                     bandwidth[neighbor] = new_bw
@@ -38,32 +38,31 @@ def calculate_path_performance(G, path, metric):
     if path is None:
         return None
     if metric in ['delay', 'cost', 'rtt', 'interaction_frequency', 'social_distance', 'length', 'flow_time']:
-        return sum(G[u][v][metric] for u, v in zip(path[:-1], path[1:]))
+        return sum(G[u][v].get(metric, 0) for u, v in zip(path[:-1], path[1:]))
     elif metric in ['reliability', 'trust_decay', 'information_fidelity']:
-        return np.prod([G[u][v][metric] for u, v in zip(path[:-1], path[1:])])
+        return np.prod([G[u][v].get(metric, 1) for u, v in zip(path[:-1], path[1:])])
     elif metric in ['bandwidth', 'capacity']:
-        return min(G[u][v][metric] for u, v in zip(path[:-1], path[1:]))
+        return min(G[u][v].get(metric, 0) for u, v in zip(path[:-1], path[1:]))
     elif metric == 'is_secure':
-        return all(G[u][v][metric] for u, v in zip(path[:-1], path[1:]))
+        return all(G[u][v].get(metric, False) for u, v in zip(path[:-1], path[1:]))
     else:
         raise ValueError(f"Unsupported metric: {metric}")
-    
+
 def best_performance_routing(G, source, target, metric):
     if metric in ['delay', 'cost', 'rtt', 'interaction_frequency', 'social_distance', 'length', 'flow_time']:
         return nx.shortest_path(G, source, target, weight=metric)
     elif metric in ['reliability', 'trust_decay', 'information_fidelity']:
-        return nx.shortest_path(G, source, target, weight=lambda u, v, d: -np.log(d['reliability']))
+        return nx.shortest_path(G, source, target, weight=lambda u, v, d: -np.log(d.get(metric, 1)))
     elif metric in ['bandwidth', 'capacity']:
         return maximum_bandwidth_path(G, source, target)
     elif metric == 'is_secure':
-        secure_graph = nx.Graph((u, v, d) for (u, v, d) in G.edges(data=True) if d['is_secure'])
+        secure_graph = nx.Graph((u, v, d) for (u, v, d) in G.edges(data=True) if d.get('is_secure', False))
         if source in secure_graph and target in secure_graph:
             if nx.has_path(secure_graph, source, target):
                 return nx.shortest_path(secure_graph, source, target)
         return None  # No secure path exists
     else:
         raise ValueError(f"Unsupported metric: {metric}")
-
 
 def generate_tomography_dataset(G, monitors, metrics):
     measurements_monitor = {metric: {} for metric in metrics}
