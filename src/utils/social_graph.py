@@ -7,6 +7,7 @@ import re
 import networkx as nx
 import argparse
 import random
+from src.utils.split_with_monitors import generate_tomography_dataset, graph_to_pyg
 
 
 def read_edges(file_content):
