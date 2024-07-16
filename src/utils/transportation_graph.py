@@ -20,7 +20,7 @@ def set_random_seed(seed):
 def parse_tntp_file(file_path):
     edges = []
     edge_attrs = {
-        'capacity': [], 'length': [], 'free_flow_time': [],
+        'capacity': [], 'length': [], 'flow_time': [],
         'b': [], 'power': [], 'speed': [], 'toll': [], 'link_type': []
     }
     nodes = set()
@@ -42,7 +42,7 @@ def parse_tntp_file(file_path):
                     edges.append([init_node, term_node])
                     
                     # Parse edge attributes
-                    for i, attr in enumerate(['capacity', 'length', 'free_flow_time', 'b', 'power', 'speed', 'toll', 'link_type']):
+                    for i, attr in enumerate(['capacity', 'length', 'flow_time', 'b', 'power', 'speed', 'toll', 'link_type']):
                         edge_attrs[attr].append(float(parts[i+2]))
     
     num_nodes = max(nodes)
@@ -164,7 +164,8 @@ def create_embeddings(edges, nodes, embedding_type, embedding_dim, num_walks, wa
     else:
         raise ValueError("Invalid embedding type. Choose 'binary', 'hope', 'randomwalk', or 'deepwalk'.")
 
-def create_pyg_graph(edges, edge_attrs, num_nodes, node_embeddings):
+def create_pyg_graph(edges, edge_attrs, num_nodes, node_embeddings, monitor_rate, seed):
+    set_random_seed(seed)
     node_mapping = {node: idx for idx, node in enumerate(range(1, num_nodes + 1))}
     
     mapped_edges = [[node_mapping[edge[0]], node_mapping[edge[1]]] for edge in edges]
@@ -175,23 +176,43 @@ def create_pyg_graph(edges, edge_attrs, num_nodes, node_embeddings):
         if node in node_mapping:
             x[node_mapping[node]] = torch.tensor(embedding, dtype=torch.float)
     
-    data = Data(x=x, edge_index=edge_index, num_nodes=num_nodes)
+    # Create a NetworkX graph for tomography dataset generation
+    G = nx.Graph()
+    for edge, capacity, length, flow_time in zip(edges, edge_attrs['capacity'], edge_attrs['length'], edge_attrs['flow_time']):
+        G.add_edge(edge[0], edge[1], capacity=capacity, length=length, flow_time=flow_time)
     
+    # Select monitors
+    num_monitors = max(1, int(num_nodes * monitor_rate))
+    monitors = random.sample(list(G.nodes()), num_monitors)
+    
+    # Generate tomography dataset
+    metrics = ['capacity', 'length', 'flow_time']
+    measurements_monitor, measurements_unknown, edge_index_monitor, edge_index_unknown, edge_attr_monitor, edge_attr_unknown = generate_tomography_dataset(G, monitors, metrics)
+    
+    # Use graph_to_pyg to convert the graph to PyG format
+    data = graph_to_pyg(G, monitors, measurements_monitor, measurements_unknown, 
+                        edge_index_monitor, edge_index_unknown, 
+                        edge_attr_monitor, edge_attr_unknown)
+    
+    # Add node features
+    data.x = x
+    
+    # Add original edge attributes
     for attr_name, attr_values in edge_attrs.items():
-        setattr(data, attr_name, torch.tensor(attr_values, dtype=torch.float))
+        setattr(data, f'edge_{attr_name}', torch.tensor(attr_values, dtype=torch.float))
     
     data.original_node_ids = list(range(1, num_nodes + 1))
     
     return data, node_mapping
 
-def tntp_to_pyg(file_path, embedding_type, embedding_dim, num_walks, walk_length, seed):
+def tntp_to_pyg(file_path, embedding_type, embedding_dim, num_walks, walk_length, monitor_rate, seed):
     set_random_seed(seed)
     edges, edge_attrs, num_nodes, nodes = parse_tntp_file(file_path)
     node_embeddings = create_embeddings(edges, nodes, embedding_type, embedding_dim, num_walks, walk_length, seed)
-    graph, node_mapping = create_pyg_graph(edges, edge_attrs, num_nodes, node_embeddings)
+    graph, node_mapping = create_pyg_graph(edges, edge_attrs, num_nodes, node_embeddings, monitor_rate, seed)
     return graph, node_mapping
 
-def process_tntp_files(input_folder, output_folder, embedding_type='binary', embedding_dim=32, num_walks=10, walk_length=80, seed=42):
+def process_tntp_files(input_folder, output_folder, embedding_type, embedding_dim, num_walks, walk_length, monitor_rate, seed):
     set_random_seed(seed)
     os.makedirs(output_folder, exist_ok=True)
     
@@ -203,7 +224,7 @@ def process_tntp_files(input_folder, output_folder, embedding_type='binary', emb
         file_name = os.path.basename(file_path)
         name_without_ext = os.path.splitext(file_name)[0]
 
-        graph, _ = tntp_to_pyg(file_path, embedding_type, embedding_dim, num_walks, walk_length, seed)
+        graph, _ = tntp_to_pyg(file_path, embedding_type, embedding_dim, num_walks, walk_length, monitor_rate, seed)
         output_file = os.path.join(output_folder, f"{name_without_ext}.pt")
         torch.save(graph, output_file)
         print(f"Processed and saved: {output_file}")
@@ -224,14 +245,16 @@ def main():
                         help="Number of random walks per node (for randomwalk and deepwalk)")
     parser.add_argument("--walk_length", type=int, default=80,
                         help="Length of each random walk (for randomwalk and deepwalk)")
+    parser.add_argument("--monitor_rate", type=float, default=0.1,
+                        help="Ratio of nodes to be selected as monitors")
     parser.add_argument("--seed", type=int, default=42,
                         help="Random seed for reproducibility")
     
     args = parser.parse_args()
     
     process_tntp_files(args.input, args.output, args.embedding_type, 
-                       args.embedding_dim, args.num_walks, args.walk_length, args.seed)
+                       args.embedding_dim, args.num_walks, args.walk_length, 
+                       args.monitor_rate, args.seed)
 
 if __name__ == "__main__":
     main()
-    
