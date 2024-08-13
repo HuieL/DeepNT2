@@ -64,17 +64,30 @@ def best_performance_routing(G, source, target, metric):
     else:
         raise ValueError(f"Unsupported metric: {metric}")
 
-def generate_tomography_dataset(G, monitors, metrics):
+def generate_tomography_dataset(G, sampling_rate, metrics, seed):
+    random.seed(seed)
+    num_nodes = G.number_of_nodes()
+    total_pairs = num_nodes * (num_nodes - 1)  # Total number of possible node pairs
+    target_samples = int(total_pairs * sampling_rate)
+    
+    # Calculate number of monitors
+    num_monitors = 1
+    while num_monitors * (num_nodes - 1) < target_samples:
+        num_monitors += 1
+    
+    # Randomly select monitors
+    monitors = random.sample(list(G.nodes()), num_monitors)
+    monitor_set = set(monitors)
+    
     measurements_monitor = {metric: {} for metric in metrics}
     measurements_unknown = {metric: {} for metric in metrics}
-    edge_index_monitor = {metric: set() for metric in metrics}
-    edge_index_unknown = {metric: set() for metric in metrics}
-    edge_attr_monitor = {metric: [] for metric in metrics}
-    edge_attr_unknown = {metric: [] for metric in metrics}
+    node_pair_monitor = {metric: set() for metric in metrics}
+    node_pair_unknown = {metric: set() for metric in metrics}
+    path_attr_monitor = {metric: [] for metric in metrics}
+    path_attr_unknown = {metric: [] for metric in metrics}
     
     nodes = list(G.nodes())
-    monitor_set = set(monitors)
-    monitor_to_index = {monitor: idx for idx, monitor in enumerate(monitors)}
+    node_to_index = {node: idx for idx, node in enumerate(nodes)}
     
     for source in tqdm(monitors, desc="Processing monitors"):
         for target in nodes:
@@ -86,12 +99,12 @@ def generate_tomography_dataset(G, monitors, metrics):
                             performance = calculate_path_performance(G, path, metric)
                             if target in monitor_set:
                                 measurements_monitor[metric][(source, target)] = performance
-                                edge_index_monitor[metric].add((monitor_to_index[source], monitor_to_index[target]))
-                                edge_attr_monitor[metric].append(performance)
+                                node_pair_monitor[metric].add((node_to_index[source], node_to_index[target]))
+                                path_attr_monitor[metric].append(performance)
                             else:
                                 measurements_unknown[metric][(source, target)] = performance
-                                edge_index_unknown[metric].add((monitor_to_index[source], nodes.index(target)))
-                                edge_attr_unknown[metric].append(performance)
+                                node_pair_unknown[metric].add((node_to_index[source], node_to_index[target]))
+                                path_attr_unknown[metric].append(performance)
                     except nx.NetworkXNoPath:
                         if target in monitor_set:
                             measurements_monitor[metric][(source, target)] = np.nan
@@ -99,39 +112,37 @@ def generate_tomography_dataset(G, monitors, metrics):
                             measurements_unknown[metric][(source, target)] = np.nan
 
     return (measurements_monitor, measurements_unknown, 
-            {m: list(e) for m, e in edge_index_monitor.items()}, 
-            {m: list(e) for m, e in edge_index_unknown.items()}, 
-            edge_attr_monitor, edge_attr_unknown)
+            {m: list(e) for m, e in node_pair_monitor.items()}, 
+            {m: list(e) for m, e in node_pair_unknown.items()}, 
+            path_attr_monitor, path_attr_unknown)
 
-def graph_to_pyg(G, monitors, measurements_monitor, measurements_unknown, edge_index_monitor, edge_index_unknown, edge_attr_monitor, edge_attr_unknown):
+def graph_to_pyg(G, measurements_monitor, measurements_unknown, node_pair_monitor, node_pair_unknown, path_attr_monitor, path_attr_unknown):
     num_nodes = G.number_of_nodes()
-    num_monitors = len(monitors)
     
     data = Data()
     data.num_nodes = num_nodes
-    data.num_monitors = num_monitors
     
     # Original graph structure
     data.edge_index = torch.tensor(list(G.edges())).t().contiguous()
     
     # Monitor paths (training data)
-    data.edge_index_monitor = {
+    data.node_pair_monitor = {
         metric: torch.tensor(edges).t().contiguous()
-        for metric, edges in edge_index_monitor.items()}
+        for metric, edges in node_pair_monitor.items()}
     
     # Unknown paths (test data)
-    data.edge_index_unknown = {
+    data.node_pair_unknown = {
         metric: torch.tensor(edges).t().contiguous()
-        for metric, edges in edge_index_unknown.items()}
+        for metric, edges in node_pair_unknown.items()}
     
     # Metrics
     data.metrics_monitor = {
         metric: torch.tensor(values, dtype=torch.float) 
-        for metric, values in edge_attr_monitor.items()}
+        for metric, values in path_attr_monitor.items()}
     
-    data.metrics_monitor = {
+    data.metrics_unknown = {
         metric: torch.tensor(values, dtype=torch.float) 
-        for metric, values in edge_attr_unknown.items()}
+        for metric, values in path_attr_unknown.items()}
     
     # Store measurements
     data.measurements_monitor = measurements_monitor
@@ -139,11 +150,9 @@ def graph_to_pyg(G, monitors, measurements_monitor, measurements_unknown, edge_i
     
     return data
 
-
 # Usage example:
 # metrics = ['delay', 'cost', 'reliability', 'bandwidth', 'is_secure']
 # monitors = random.sample(list(G.nodes()), num_monitors)
 
 # measurements_monitor, measurements_unknown, edge_index_monitor, edge_index_unknown, edge_attr_monitor, edge_attr_unknown = generate_tomography_dataset(G, monitors, metrics)
 # data = graph_to_pyg(G, monitors, measurements_monitor, measurements_unknown, edge_index_monitor, edge_index_unknown, edge_attr_monitor, edge_attr_unknown)
-
