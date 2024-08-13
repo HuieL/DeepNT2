@@ -64,7 +64,7 @@ def best_performance_routing(G, source, target, metric):
     else:
         raise ValueError(f"Unsupported metric: {metric}")
 
-def generate_tomography_dataset(G, sampling_rate, metrics, seed):
+def generate_tomography_dataset(G, sampling_rate, metrics, seed=42):
     random.seed(seed)
     num_nodes = G.number_of_nodes()
     total_pairs = num_nodes * (num_nodes - 1)  # Total number of possible node pairs
