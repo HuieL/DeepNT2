@@ -149,10 +149,3 @@ def graph_to_pyg(G, measurements_monitor, measurements_unknown, node_pair_monito
     data.measurements_unknown = measurements_unknown
     
     return data
-
-# Usage example:
-# metrics = ['delay', 'cost', 'reliability', 'bandwidth', 'is_secure']
-# monitors = random.sample(list(G.nodes()), num_monitors)
-
-# measurements_monitor, measurements_unknown, edge_index_monitor, edge_index_unknown, edge_attr_monitor, edge_attr_unknown = generate_tomography_dataset(G, monitors, metrics)
-# data = graph_to_pyg(G, monitors, measurements_monitor, measurements_unknown, edge_index_monitor, edge_index_unknown, edge_attr_monitor, edge_attr_unknown)
