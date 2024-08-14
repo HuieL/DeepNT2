@@ -161,7 +161,11 @@ def binary_coding_embeddings(G):
     
     return embeddings
 
-def warts_to_graph(warts_file, max_records, num_walks, walk_length, embedding_type, p, q, embedding_dim, sampling_rate):
+def warts_to_graph(warts_file, max_records, num_walks, walk_length, embedding_type, p, q, embedding_dim, sampling_rate, seed):
+    random.seed(seed)
+    np.random.seed(seed)
+    torch.manual_seed(seed)
+
     G = nx.DiGraph()
     node_mapping = {}  # Map IP addresses to integer indices
     node_counter = 0
@@ -226,7 +230,7 @@ def warts_to_graph(warts_file, max_records, num_walks, walk_length, embedding_ty
 
     return pyg_graph
 
-def process_warts_files(input_dir, output_dir, max_records, num_walks, walk_length, embedding_type, p, q, embedding_dim, sampling_rate):
+def process_warts_files(input_dir, output_dir, max_records, num_walks, walk_length, embedding_type, p, q, embedding_dim, sampling_rate, seed):
     for root, _, files in os.walk(input_dir):
         for file in tqdm(files, desc="Processing files"):
             if file.endswith('.warts'):
@@ -234,7 +238,7 @@ def process_warts_files(input_dir, output_dir, max_records, num_walks, walk_leng
                 output_path = os.path.join(output_dir, f"{os.path.splitext(file)[0]}.pt")
 
                 try:
-                    pyg_graph = warts_to_graph(input_path, max_records, num_walks, walk_length, embedding_type, p, q, embedding_dim, sampling_rate)
+                    pyg_graph = warts_to_graph(input_path, max_records, num_walks, walk_length, embedding_type, p, q, embedding_dim, sampling_rate, seed)
                     torch.save(pyg_graph, output_path)
                     print(f"Processed and saved: {output_path}")
                 except Exception as e:
@@ -265,6 +269,8 @@ def main():
                         help="Dimension of node embeddings")
     parser.add_argument("--sampling_rate", type=float, default=0.1,
                         help="Sampling rate for path measurements")
+    parser.add_argument("--seed", type=int, default=42, 
+                        help="Random seed for reproducibility")
 
     args = parser.parse_args()
 
@@ -273,7 +279,7 @@ def main():
     os.makedirs(output_dir, exist_ok=True)
     
     process_warts_files(input_dir, output_dir, args.max_records, args.num_walks, 
-                        args.walk_length, args.embedding_type, args.p, args.q, args.embedding_dim, args.sampling_rate)
+                        args.walk_length, args.embedding_type, args.p, args.q, args.embedding_dim, args.sampling_rate, args.seed)
 
 if __name__ == "__main__":
     main()
