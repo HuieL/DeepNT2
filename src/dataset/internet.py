@@ -2,8 +2,6 @@ import warts
 from warts.traceroute import Traceroute
 import networkx as nx
 import torch
-from torch_geometric.data import Data
-from torch_geometric.utils import from_networkx
 import random
 import numpy as np
 import torch.nn as nn
@@ -163,7 +161,7 @@ def binary_coding_embeddings(G):
     
     return embeddings
 
-def warts_to_graph(warts_file, max_records, num_walks, walk_length, embedding_type, p, q, embedding_dim, monitor_rate):
+def warts_to_graph(warts_file, max_records, num_walks, walk_length, embedding_type, p, q, embedding_dim, sampling_rate):
     G = nx.DiGraph()
     node_mapping = {}  # Map IP addresses to integer indices
     node_counter = 0
@@ -196,7 +194,6 @@ def warts_to_graph(warts_file, max_records, num_walks, walk_length, embedding_ty
                 print(f"Error processing record: {e}")
                 continue
 
-    # print(f"Graph created with {G.number_of_nodes()} nodes and {G.number_of_edges()} edges")
     # Generate embeddings based on the selected type
     if embedding_type in ['randomwalk', 'deepwalk']:
         walks = generate_walks(G, num_walks, walk_length, embedding_type, p, q)
@@ -208,18 +205,14 @@ def warts_to_graph(warts_file, max_records, num_walks, walk_length, embedding_ty
     else:
         raise ValueError("Invalid embedding type. Choose 'randomwalk', 'deepwalk', 'hope', or 'binary'.")
 
-    # Select monitors 
-    num_monitors = int(G.number_of_nodes() * monitor_rate)
-    monitors = random.sample(list(G.nodes()), num_monitors)
-
     # Generate tomography dataset
     metrics = ['rtt']  # RTT for internet dataset
-    measurements_monitor, measurements_unknown, edge_index_monitor, edge_index_unknown, edge_attr_monitor, edge_attr_unknown = generate_tomography_dataset(G, monitors, metrics)
+    measurements_monitor, measurements_unknown, node_pair_monitor, node_pair_unknown, path_attr_monitor, path_attr_unknown = generate_tomography_dataset(G, sampling_rate, metrics)
 
     # Use graph_to_pyg() function to convert the graph to PyG format
-    pyg_graph = graph_to_pyg(G, monitors, measurements_monitor, measurements_unknown, 
-                             edge_index_monitor, edge_index_unknown, 
-                             edge_attr_monitor, edge_attr_unknown)
+    pyg_graph = graph_to_pyg(G, measurements_monitor, measurements_unknown, 
+                             node_pair_monitor, node_pair_unknown, 
+                             path_attr_monitor, path_attr_unknown)
     
     # Add node embeddings as features
     node_features = torch.FloatTensor([embeddings[node] for node in G.nodes()])
@@ -233,7 +226,7 @@ def warts_to_graph(warts_file, max_records, num_walks, walk_length, embedding_ty
 
     return pyg_graph
 
-def process_warts_files(input_dir, output_dir, max_records, num_walks, walk_length, embedding_type, p, q, embedding_dim, monitor_rate):
+def process_warts_files(input_dir, output_dir, max_records, num_walks, walk_length, embedding_type, p, q, embedding_dim, sampling_rate):
     for root, _, files in os.walk(input_dir):
         for file in tqdm(files, desc="Processing files"):
             if file.endswith('.warts'):
@@ -241,7 +234,7 @@ def process_warts_files(input_dir, output_dir, max_records, num_walks, walk_leng
                 output_path = os.path.join(output_dir, f"{os.path.splitext(file)[0]}.pt")
 
                 try:
-                    pyg_graph = warts_to_graph(input_path, max_records, num_walks, walk_length, embedding_type, p, q, embedding_dim, monitor_rate)
+                    pyg_graph = warts_to_graph(input_path, max_records, num_walks, walk_length, embedding_type, p, q, embedding_dim, sampling_rate)
                     torch.save(pyg_graph, output_path)
                     print(f"Processed and saved: {output_path}")
                 except Exception as e:
@@ -270,8 +263,8 @@ def main():
                         help="In-out parameter for node2vec")
     parser.add_argument("--embedding_dim", type=int, default=32,
                         help="Dimension of node embeddings")
-    parser.add_argument("--monitor_rate", type=float, default=0.1,
-                        help="Ratio of nodes selected as monitors")
+    parser.add_argument("--sampling_rate", type=float, default=0.1,
+                        help="Sampling rate for path measurements")
 
     args = parser.parse_args()
 
@@ -280,8 +273,7 @@ def main():
     os.makedirs(output_dir, exist_ok=True)
     
     process_warts_files(input_dir, output_dir, args.max_records, args.num_walks, 
-                        args.walk_length, args.embedding_type, args.p, args.q, args.embedding_dim, args.monitor_rate)
+                        args.walk_length, args.embedding_type, args.p, args.q, args.embedding_dim, args.sampling_rate)
 
 if __name__ == "__main__":
     main()
-    
