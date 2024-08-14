@@ -10,6 +10,7 @@ import random
 from tqdm import tqdm
 from src.utils.split_with_monitors import generate_tomography_dataset, graph_to_pyg
 
+
 def initialize_edge_metrics(G, seed):
     np.random.seed(seed)
     metrics = ['delay', 'interaction_frequency', 'social_distance', 'trust_decay', 'information_fidelity']
@@ -72,7 +73,7 @@ def read_featnames(file_content):
 def read_ego_features(file_content):
     return list(map(int, file_content.decode().strip().split()))
 
-def process_ego_network(tar, ego_id, dataset_name, seed, monitor_rate):
+def process_ego_network(tar, ego_id, dataset_name, seed, sampling_rate):
     random.seed(seed)
     np.random.seed(seed)
     torch.manual_seed(seed)
@@ -104,12 +105,8 @@ def process_ego_network(tar, ego_id, dataset_name, seed, monitor_rate):
     # Initialize edge metrics
     metrics = initialize_edge_metrics(G, seed)
     
-    # Select monitors
-    num_monitors = int(G.number_of_nodes() * monitor_rate)
-    monitors = random.sample(list(G.nodes()), num_monitors)
-    
-    # Generate tomography dataset
-    measurements_monitor, measurements_unknown, edge_index_monitor, edge_index_unknown, edge_attr_monitor, edge_attr_unknown = generate_tomography_dataset(G, monitors, metrics)
+    # Generate tomography dataset using sampling rate
+    measurements_monitor, measurements_unknown, node_pair_monitor, node_pair_unknown, path_attr_monitor, path_attr_unknown = generate_tomography_dataset(G, sampling_rate, metrics)
     
     # Prepare node features
     num_nodes = len(G.nodes())
@@ -124,9 +121,9 @@ def process_ego_network(tar, ego_id, dataset_name, seed, monitor_rate):
     x[node_mapping[ego_node]] = torch.tensor(ego_features, dtype=torch.float)
     
     # Use graph_to_pyg to convert the graph to PyG format
-    data = graph_to_pyg(G, monitors, measurements_monitor, measurements_unknown, 
-                        edge_index_monitor, edge_index_unknown, 
-                        edge_attr_monitor, edge_attr_unknown)
+    data = graph_to_pyg(G, measurements_monitor, measurements_unknown, 
+                        node_pair_monitor, node_pair_unknown, 
+                        path_attr_monitor, path_attr_unknown)
     
     # Add node features and ego node information
     data.x = x
@@ -134,7 +131,7 @@ def process_ego_network(tar, ego_id, dataset_name, seed, monitor_rate):
     
     return data, node_mapping, featnames
 
-def process_tar_file(tar_path, output_dir, dataset_name, seed, monitor_rate):
+def process_tar_file(tar_path, output_dir, dataset_name, seed, sampling_rate):
     with tarfile.open(tar_path, 'r:gz') as tar:
         ego_ids = set()
         for member in tar.getmembers():
@@ -146,7 +143,7 @@ def process_tar_file(tar_path, output_dir, dataset_name, seed, monitor_rate):
         print(f"Found {len(ego_ids)} ego networks in the {dataset_name} dataset")
         
         for ego_id in tqdm(ego_ids, desc="Processing ego networks"):
-            result = process_ego_network(tar, ego_id, dataset_name, seed, monitor_rate)
+            result = process_ego_network(tar, ego_id, dataset_name, seed, sampling_rate)
             if result is not None:
                 data, _, _ = result
                 output_path = os.path.join(output_dir, f"{dataset_name}_ego_net_{ego_id}.pt")
@@ -160,15 +157,15 @@ def main():
     parser.add_argument("--input", type=str, default="./dataset/raw_data/social_network", help="Directory containing the input tar.gz file")
     parser.add_argument("--output", type=str, default="./dataset/processed_data/social_network", help="Directory to save processed data")
     parser.add_argument("--seed", type=int, default=42, help="Random seed for reproducibility")
-    parser.add_argument("--monitor_rate", type=float, default=0.1, help="Ratio of nodes to be selected as monitors")
+    parser.add_argument("--sampling_rate", type=float, default=0.1, help="Sampling rate for path measurements")
     
     args = parser.parse_args()
     
     tar_path = os.path.join(args.input, f"{args.dataset_name}.tar.gz")
     output_dir = os.path.join(args.output, f"{args.dataset_name}")
     os.makedirs(output_dir, exist_ok=True)
-    
-    process_tar_file(tar_path, output_dir, args.dataset_name, args.seed, args.monitor_rate)
+
+    process_tar_file(tar_path, output_dir, args.dataset_name, args.seed, args.sampling_rate)
 
 if __name__ == "__main__":
     main()
