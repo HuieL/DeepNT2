@@ -164,6 +164,7 @@ def create_embeddings(edges, nodes, embedding_type, embedding_dim, num_walks, wa
         raise ValueError("Invalid embedding type. Choose 'binary', 'hope', 'randomwalk', or 'deepwalk'.")
 
 def update_graph(graph):
+    # Update graphs since the node index is not from 0 in the raw data
     graph.edge_index = graph.edge_index - 1
     for attr in ['node_pair_monitor', 'node_pair_unknown']:
         if hasattr(graph, attr):
