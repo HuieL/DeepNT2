@@ -30,4 +30,4 @@ class DeepNT(nn.Module):
 
         concat = torch.cat((hu_updated, hv_updated), dim=-1)
         output = self.fc(concat)
-        return torch.sigmoid(output).squeeze(-1) 
+        return output.squeeze(-1) 
