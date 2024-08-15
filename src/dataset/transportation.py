@@ -163,6 +163,15 @@ def create_embeddings(edges, nodes, embedding_type, embedding_dim, num_walks, wa
     else:
         raise ValueError("Invalid embedding type. Choose 'binary', 'hope', 'randomwalk', or 'deepwalk'.")
 
+def update_graph(graph):
+    graph.edge_index = graph.edge_index - 1
+    for attr in ['node_pair_monitor', 'node_pair_unknown']:
+        if hasattr(graph, attr):
+            setattr(graph, attr, {k: v - 1 for k, v in getattr(graph, attr).items()})
+
+    graph.original_node_ids = list(range(1, graph.num_nodes + 1))
+    return graph
+
 def create_pyg_graph(edges, edge_attrs, num_nodes, node_embeddings, sampling_rate, seed):
     set_random_seed(seed)
     node_mapping = {node: idx for idx, node in enumerate(range(1, num_nodes + 1))}
@@ -221,7 +230,7 @@ def process_tntp_files(input_folder, output_folder, embedding_type, embedding_di
             continue
         graph, _ = tntp_to_pyg(file_path, embedding_type, embedding_dim, num_walks, walk_length, sampling_rate, seed)
         
-        torch.save(graph, output_file)
+        torch.save(update_graph(graph), output_file)
         print(f"Processed and saved: {output_file}")
 
 
