@@ -7,24 +7,59 @@ from src.model.deepnt import DeepNT
 from src.utils.get_paths import edge_index_to_adj
 from tqdm import tqdm
 import argparse
+import numpy as np
 
 
+class EarlyStopping:
+    def __init__(self, patience=7, verbose=False, delta=0, path='checkpoint.pt'):
+        self.patience = patience
+        self.verbose = verbose
+        self.counter = 0
+        self.best_score = None
+        self.early_stop = False
+        self.val_loss_min = np.Inf
+        self.delta = delta
+        self.path = path
+
+    def __call__(self, val_loss, model):
+        score = -val_loss
+
+        if self.best_score is None:
+            self.best_score = score
+            self.save_checkpoint(val_loss, model)
+        elif score < self.best_score + self.delta:
+            self.counter += 1
+            print(f'EarlyStopping counter: {self.counter} out of {self.patience}')
+            if self.counter >= self.patience:
+                self.early_stop = True
+        else:
+            self.best_score = score
+            self.save_checkpoint(val_loss, model)
+            self.counter = 0
+
+    def save_checkpoint(self, val_loss, model):
+        if self.verbose:
+            print(f'Validation loss decreased ({self.val_loss_min:.6f} --> {val_loss:.6f}). Saving model ...')
+        torch.save(model.state_dict(), self.path)
+        self.val_loss_min = val_loss
+        
 def prepare_batches(data, batch_size, mask, shuffle=True):
     node_pairs = data.node_pair[:, mask].t()
     performance_values = data.performance_values[mask]
     dataset = TensorDataset(node_pairs, performance_values)
     return DataLoader(dataset, batch_size=batch_size, shuffle=shuffle)
 
-def train_wo_constraints(model, data, adj, optimizer, device, num_epochs, batch_size):
-    model.train()
+def train_wo_constraints(model, data, adj, optimizer, device, num_epochs, batch_size, patience):
+    early_stopping = EarlyStopping(patience=patience, verbose=True)
     dataloader = prepare_batches(data, batch_size, data.train_mask, shuffle=True)
 
     for epoch in range(num_epochs):
+        model.train()
         total_loss = 0
         total_mape = 0
         total_samples = 0
 
-        for batch_node_pairs, batch_labels in tqdm(dataloader, desc=f"Training Epoch {epoch}"):
+        for batch_node_pairs, batch_labels in tqdm(dataloader, desc=f"Training Epoch {epoch+1}"):
             optimizer.zero_grad()
             
             batch_node_pairs = batch_node_pairs.to(device)
@@ -44,6 +79,16 @@ def train_wo_constraints(model, data, adj, optimizer, device, num_epochs, batch_
         avg_mape = total_mape / total_samples
         val_loss, val_mape = validate_wo_constraints(model, data, adj, device, batch_size)
         print(f'Epoch {epoch+1}/{num_epochs}, Train Loss: {avg_loss:.4f}, Train MAPE: {avg_mape:.4f}, Val Loss: {val_loss:.4f}, Val MAPE: {val_mape:.4f}')
+
+        # Early stopping
+        early_stopping(val_loss, model)
+        if early_stopping.early_stop:
+            print("Early stopping")
+            break
+
+    # Load the best model
+    model.load_state_dict(torch.load('checkpoint.pt'))
+    return model
 
 def validate_wo_constraints(model, data, adj, device, batch_size):
     model.eval()
@@ -92,16 +137,17 @@ def test_wo_constraints(model, data, adj, device, batch_size):
     return total_loss / total_samples, total_mape / total_samples
 
 
-def train_with_constraints(model, data, adj, optimizer, Q, K, lambda1, lambda2, lambda3, device, num_epochs, d, V, batch_size):
-    model.train()
+def train_with_constraints(model, data, adj, optimizer, Q, K, lambda1, lambda2, lambda3, device, num_epochs, d, V, batch_size, patience):
+    early_stopping = EarlyStopping(patience=patience, verbose=True)
     dataloader = prepare_batches(data, batch_size, data.train_mask, shuffle=True)
 
     for epoch in range(num_epochs):
+        model.train()
         adj = apply_constraints(adj, d, V)
         total_loss = 0
         total_samples = 0
 
-        for batch_node_pairs, batch_labels in tqdm(dataloader, desc=f"Training Epoch {epoch}"):
+        for batch_node_pairs, batch_labels in tqdm(dataloader, desc=f"Training Epoch {epoch+1}"):
             optimizer.zero_grad()
             
             batch_node_pairs = batch_node_pairs.to(device)
@@ -119,8 +165,16 @@ def train_with_constraints(model, data, adj, optimizer, Q, K, lambda1, lambda2, 
         avg_loss = total_loss / total_samples
         val_loss, val_mape = validate_with_constraints(model, data, adj, Q, K, lambda1, lambda2, lambda3, device, batch_size)
         print(f'Epoch {epoch+1}/{num_epochs}, Train Loss: {avg_loss:.4f}, Val Loss: {val_loss:.4f}, Val MAPE: {val_mape:.4f}')
-    
-    return adj
+
+        # Early stopping
+        early_stopping(val_loss, model)
+        if early_stopping.early_stop:
+            print("Early stopping")
+            break
+
+    # Load the best model
+    model.load_state_dict(torch.load('checkpoint.pt'))
+    return model, adj
 
 def validate_with_constraints(model, data, adj, Q, K, lambda1, lambda2, lambda3, device, batch_size):
     model.eval()
@@ -168,16 +222,17 @@ def test_with_constraints(model, data, adj, Q, K, lambda1, lambda2, lambda3, dev
 
     return total_loss / total_samples, total_mape / total_samples
 
+
 def main():
     parser = argparse.ArgumentParser(description="Training DeepNT model ...")
     parser.add_argument("--use_constraints", action="store_true", help="Use constraints in training")
     parser.add_argument("--input_dim", type=int, default=None, help="Input dimension")
-    parser.add_argument("--hidden_dim", type=int, default=64, help="Hidden dimension")
-    parser.add_argument("--output_dim", type=int, default=64, help="Output dimension")
-    parser.add_argument("--num_layers", type=int, default=4, help="Number of layers")
-    parser.add_argument("--num_epochs", type=int, default=1, help="Number of epochs")
-    parser.add_argument("--num_paths", type=int, default=2, help="Number of paths")
-    parser.add_argument("--lr", type=float, default=0.0005, help="Learning rate")
+    parser.add_argument("--hidden_dim", type=int, default=128, help="Hidden dimension")
+    parser.add_argument("--output_dim", type=int, default=128, help="Output dimension")
+    parser.add_argument("--num_layers", type=int, default=3, help="Number of layers")
+    parser.add_argument("--num_epochs", type=int, default=10, help="Number of epochs")
+    parser.add_argument("--num_paths", type=int, default=1, help="Number of paths")
+    parser.add_argument("--lr", type=float, default=0.01, help="Learning rate")
     parser.add_argument("--lambda1", type=float, default=1e-3, help="Lambda1 for constraints")
     parser.add_argument("--lambda2", type=float, default=1e-3, help="Lambda2 for constraints")
     parser.add_argument("--lambda3", type=float, default=1e-1, help="Lambda3 for constraints")
@@ -186,7 +241,8 @@ def main():
     parser.add_argument("--batch_size", type=int, default=256, help="Batch size for training and validation")
     parser.add_argument("--data_path", type=str, required=True, help="Path to the data file")
     parser.add_argument("--metric", type=str, default="delay", help="Metric to use")
-
+    parser.add_argument("--patience", type=int, default=7, help="Patience for early stopping")
+ 
     args = parser.parse_args()
 
     # Load data
@@ -195,7 +251,7 @@ def main():
     
     if args.input_dim is None:
         args.input_dim = data.x.size(1)
-
+ 
     # Initialize the model, criterion, and optimizer
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     model = DeepNT(args.input_dim, args.hidden_dim, args.output_dim, args.num_layers, args.num_paths).to(device)
@@ -209,10 +265,10 @@ def main():
     Q = torch.zeros_like(adj) 
 
     if args.use_constraints:
-        adj = train_with_constraints(model, data, adj, optimizer, Q, args.K, args.lambda1, args.lambda2, args.lambda3, device, args.num_epochs, args.d, V, args.batch_size)
+        model, adj = train_with_constraints(model, data, adj, optimizer, Q, args.K, args.lambda1, args.lambda2, args.lambda3, device, args.num_epochs, args.d, V, args.batch_size, args.patience)
         test_loss, test_mape = test_with_constraints(model, data, adj, Q, args.K, args.lambda1, args.lambda2, args.lambda3, device, args.batch_size)
     else:
-        train_wo_constraints(model, data, adj, optimizer, device, args.num_epochs, args.batch_size)
+        model = train_wo_constraints(model, data, adj, optimizer, device, args.num_epochs, args.batch_size, args.patience)
         test_loss, test_mape = test_wo_constraints(model, data, adj, device, args.batch_size)
 
     print(f'Test Loss: {test_loss:.4f}, Test MAPE: {test_mape:.4f}')
