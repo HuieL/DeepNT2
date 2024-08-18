@@ -34,14 +34,14 @@ def diameter_constraint(A, Q, K):
 
     return torch.norm(torch.clamp(Q - A_k, min=0), p='fro')
 
-# Simplified loss function with only MSE loss
-def simplified_loss_function(output, target):
-    mse_loss = F.mse_loss(output, target)
-    return mse_loss
-
 def contrained_loss_function(output, target, A, Q, K, lambda1, lambda2, lambda3):
     mse_loss = F.mse_loss(output, target)
     sparsity_loss = lambda1 * torch.norm(A, p=0)
     diameter_loss = lambda2 * diameter_constraint(A, Q, K)
     metric_specific_loss = lambda3 * sum(torch.clamp(output - min(yuz + yzv for yuz, yzv in zip(output, output)), min=0))
     return mse_loss + sparsity_loss + diameter_loss + metric_specific_loss
+
+# Simplified loss function with only MSE loss
+def simplified_loss_function(output, target):
+    mse_loss = F.mse_loss(output, target)
+    return mse_loss
