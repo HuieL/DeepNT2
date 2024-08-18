@@ -121,7 +121,7 @@ def validate_wo_constraints(model, data, adj, device, batch_size):
 def test_wo_constraints(model, data, adj, device, batch_size):
     model.eval()
     dataloader = prepare_batches(data, batch_size, data.test_mask, shuffle=False)
-    
+
     total_loss = 0
     total_mape = 0
     total_mse = 0
@@ -255,7 +255,7 @@ def main():
     parser.add_argument("--lambda3", type=float, default=1e-1, help="Lambda3 for constraints")
     parser.add_argument("--K", type=int, default=3, help="K value for constraints")
     parser.add_argument("--d", type=int, default=100, help="Sparsity threshold")
-    parser.add_argument("--batch_size", type=int, default=512, help="Batch size for training and validation")
+    parser.add_argument("--batch_size", type=int, default=1024, help="Batch size for training and validation")
     parser.add_argument("--data_path", type=str, required=True, help="Path to the data file")
     parser.add_argument("--metric", type=str, default="delay", help="Metric to use")
     parser.add_argument("--patience", type=int, default=7, help="Patience for early stopping")
@@ -266,7 +266,7 @@ def main():
 
     # Load data
     raw_data = torch.load(args.data_path)
-    data = load_data(raw_data, args.metric)['data']
+    data = load_data(raw_data, args.metric)['data'].to(device)
     
     if args.input_dim is None:
         args.input_dim = data.x.size(1)
@@ -276,16 +276,17 @@ def main():
     model = DeepNT(args.input_dim, args.hidden_dim, args.output_dim, args.num_layers, args.num_paths).to(device)
     optimizer = torch.optim.Adam(model.parameters(), lr=args.lr)
 
-    data = data.to(device)
-    masked_edge_index = edge_masked(data.edge_index, data.x.shape[0], args.topology_error_rate, args.seed)  
+    masked_edge_index = edge_masked(data.edge_index, data.x.shape[0], args.topology_error_rate, args.seed).to(device)   
     adj = edge_index_to_adj(masked_edge_index, data.x.shape[0]).to(device) 
 
     # Define the constraints
     V = data.x.shape[0]
-    Q = torch.zeros_like(adj) 
+    Q = torch.zeros_like(adj).to(device)
+    K = torch.tensor(args.K, device=device)
 
     if args.use_constraints:
-        model, adj = train_with_constraints(model, data, adj, optimizer, Q, args.K, args.lambda1, args.lambda2, args.lambda3, device, args.num_epochs, args.d, V, args.batch_size, args.patience)
+        model, adj = train_with_constraints(model, data, adj, optimizer, Q, K, args.lambda1, args.lambda2, args.lambda3, device, args.num_epochs, args.d, V, args.batch_size, args.patience)
+        adj = adj.to(device)
         test_loss, test_mape, test_mse = test_with_constraints(model, data, adj, Q, args.K, args.lambda1, args.lambda2, args.lambda3, device, args.batch_size)
     else:
         model = train_wo_constraints(model, data, adj, optimizer, device, args.num_epochs, args.batch_size, args.patience)
