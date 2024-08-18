@@ -9,11 +9,6 @@ def edge_index_to_adj(edge_index, num_nodes):
       adj[edge_index[0], edge_index[1]] = 1
       adj[edge_index[1], edge_index[0]] = 1
       adj += torch.eye(num_nodes)
-      # Normalize adjacency matrix
-      deg = adj.sum(dim=1)
-      deg_inv_sqrt = deg.pow(-0.5)
-      deg_inv_sqrt[deg_inv_sqrt == float('inf')] = 0
-      adj = deg_inv_sqrt.view(-1, 1) * adj * deg_inv_sqrt.view(1, -1)
       return adj
 
 # Randomly sample paths
