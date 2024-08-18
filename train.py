@@ -1,7 +1,7 @@
 import torch
 from torch.utils.data import TensorDataset, DataLoader
 from src.model.loss import simplified_loss_function, contrained_loss_function, apply_constraints
-from src.utils.metrics import mape_calculation
+from src.utils.metrics import mape_calculation, mse_calculation
 from src.dataset.loader import load_data
 from src.model.deepnt import DeepNT
 from src.utils.get_paths import edge_index_to_adj
@@ -57,6 +57,7 @@ def train_wo_constraints(model, data, adj, optimizer, device, num_epochs, batch_
         model.train()
         total_loss = 0
         total_mape = 0
+        total_mse = 0
         total_samples = 0
 
         for batch_node_pairs, batch_labels in tqdm(dataloader, desc=f"Training Epoch {epoch+1}"):
@@ -73,12 +74,14 @@ def train_wo_constraints(model, data, adj, optimizer, device, num_epochs, batch_
 
             total_loss += loss.item() * len(batch_labels)
             total_mape += mape_calculation(batch_outputs, batch_labels).sum().item()
+            total_mse += mse_calculation(batch_outputs, batch_labels).item() * len(batch_labels)
             total_samples += len(batch_labels)
 
         avg_loss = total_loss / total_samples
         avg_mape = total_mape / total_samples
-        val_loss, val_mape = validate_wo_constraints(model, data, adj, device, batch_size)
-        print(f'Epoch {epoch+1}/{num_epochs}, Train Loss: {avg_loss:.4f}, Train MAPE: {avg_mape:.4f}, Val Loss: {val_loss:.4f}, Val MAPE: {val_mape:.4f}')
+        avg_mse = total_mse / total_samples
+        val_loss, val_mape, val_mse = validate_wo_constraints(model, data, adj, device, batch_size)
+        print(f'Epoch {epoch+1}/{num_epochs}, Train Loss: {avg_loss:.4f}, Train MAPE: {avg_mape:.4f}, Train MSE: {avg_mse:.4f}, Val Loss: {val_loss:.4f}, Val MAPE: {val_mape:.4f}, Val MSE: {val_mse:.4f}')
 
         # Early stopping
         early_stopping(val_loss, model)
@@ -96,6 +99,7 @@ def validate_wo_constraints(model, data, adj, device, batch_size):
     
     total_loss = 0
     total_mape = 0
+    total_mse = 0
     total_samples = 0
 
     with torch.no_grad():
@@ -109,9 +113,10 @@ def validate_wo_constraints(model, data, adj, device, batch_size):
             
             total_loss += loss.item() * len(batch_labels)
             total_mape += mape_calculation(batch_outputs, batch_labels).sum().item()
+            total_mse += mse_calculation(batch_outputs, batch_labels).item() * len(batch_labels)
             total_samples += len(batch_labels)
 
-    return total_loss / total_samples, total_mape / total_samples
+    return total_loss / total_samples, total_mape / total_samples, total_mse / total_samples
 
 def test_wo_constraints(model, data, adj, device, batch_size):
     model.eval()
@@ -119,6 +124,7 @@ def test_wo_constraints(model, data, adj, device, batch_size):
     
     total_loss = 0
     total_mape = 0
+    total_mse = 0
     total_samples = 0
 
     with torch.no_grad():
@@ -132,9 +138,10 @@ def test_wo_constraints(model, data, adj, device, batch_size):
             
             total_loss += loss.item() * len(batch_labels)
             total_mape += mape_calculation(batch_outputs, batch_labels).sum().item()
+            total_mse += mse_calculation(batch_outputs, batch_labels).item() * len(batch_labels)
             total_samples += len(batch_labels)
 
-    return total_loss / total_samples, total_mape / total_samples
+    return total_loss / total_samples, total_mape / total_samples, total_mse / total_samples
 
 
 def train_with_constraints(model, data, adj, optimizer, Q, K, lambda1, lambda2, lambda3, device, num_epochs, d, V, batch_size, patience):
@@ -145,6 +152,8 @@ def train_with_constraints(model, data, adj, optimizer, Q, K, lambda1, lambda2, 
         model.train()
         adj = apply_constraints(adj, d, V)
         total_loss = 0
+        total_mape = 0
+        total_mse = 0
         total_samples = 0
 
         for batch_node_pairs, batch_labels in tqdm(dataloader, desc=f"Training Epoch {epoch+1}"):
@@ -160,11 +169,15 @@ def train_with_constraints(model, data, adj, optimizer, Q, K, lambda1, lambda2, 
             optimizer.step()
 
             total_loss += loss.item() * len(batch_labels)
+            total_mape += mape_calculation(batch_outputs, batch_labels).sum().item()
+            total_mse += mse_calculation(batch_outputs, batch_labels).item() * len(batch_labels)
             total_samples += len(batch_labels)
 
         avg_loss = total_loss / total_samples
-        val_loss, val_mape = validate_with_constraints(model, data, adj, Q, K, lambda1, lambda2, lambda3, device, batch_size)
-        print(f'Epoch {epoch+1}/{num_epochs}, Train Loss: {avg_loss:.4f}, Val Loss: {val_loss:.4f}, Val MAPE: {val_mape:.4f}')
+        avg_mape = total_mape / total_samples
+        avg_mse = total_mse / total_samples
+        val_loss, val_mape, val_mse = validate_with_constraints(model, data, adj, Q, K, lambda1, lambda2, lambda3, device, batch_size)
+        print(f'Epoch {epoch+1}/{num_epochs}, Train Loss: {avg_loss:.4f}, Train MAPE: {avg_mape:.4f}, Train MSE: {avg_mse:.4f}, Val Loss: {val_loss:.4f}, Val MAPE: {val_mape:.4f}, Val MSE: {val_mse:.4f}')
 
         # Early stopping
         early_stopping(val_loss, model)
@@ -182,6 +195,7 @@ def validate_with_constraints(model, data, adj, Q, K, lambda1, lambda2, lambda3,
     
     total_loss = 0
     total_mape = 0
+    total_mse = 0
     total_samples = 0
 
     with torch.no_grad():
@@ -195,9 +209,10 @@ def validate_with_constraints(model, data, adj, Q, K, lambda1, lambda2, lambda3,
             
             total_loss += loss.item() * len(batch_labels)
             total_mape += mape_calculation(batch_outputs, batch_labels).sum().item()
+            total_mse += mse_calculation(batch_outputs, batch_labels).item() * len(batch_labels)
             total_samples += len(batch_labels)
 
-    return total_loss / total_samples, total_mape / total_samples
+    return total_loss / total_samples, total_mape / total_samples, total_mse / total_samples
 
 def test_with_constraints(model, data, adj, Q, K, lambda1, lambda2, lambda3, device, batch_size):
     model.eval()
@@ -205,6 +220,7 @@ def test_with_constraints(model, data, adj, Q, K, lambda1, lambda2, lambda3, dev
     
     total_loss = 0
     total_mape = 0
+    total_mse = 0
     total_samples = 0
 
     with torch.no_grad():
@@ -218,9 +234,10 @@ def test_with_constraints(model, data, adj, Q, K, lambda1, lambda2, lambda3, dev
             
             total_loss += loss.item() * len(batch_labels)
             total_mape += mape_calculation(batch_outputs, batch_labels).sum().item()
+            total_mse += mse_calculation(batch_outputs, batch_labels).item() * len(batch_labels)
             total_samples += len(batch_labels)
 
-    return total_loss / total_samples, total_mape / total_samples
+    return total_loss / total_samples, total_mape / total_samples, total_mse / total_samples
 
 
 def main():
@@ -232,7 +249,7 @@ def main():
     parser.add_argument("--num_layers", type=int, default=3, help="Number of layers")
     parser.add_argument("--num_epochs", type=int, default=10, help="Number of epochs")
     parser.add_argument("--num_paths", type=int, default=1, help="Number of paths")
-    parser.add_argument("--lr", type=float, default=0.01, help="Learning rate")
+    parser.add_argument("--lr", type=float, default=0.005, help="Learning rate")
     parser.add_argument("--lambda1", type=float, default=1e-3, help="Lambda1 for constraints")
     parser.add_argument("--lambda2", type=float, default=1e-3, help="Lambda2 for constraints")
     parser.add_argument("--lambda3", type=float, default=1e-1, help="Lambda3 for constraints")
@@ -266,12 +283,12 @@ def main():
 
     if args.use_constraints:
         model, adj = train_with_constraints(model, data, adj, optimizer, Q, args.K, args.lambda1, args.lambda2, args.lambda3, device, args.num_epochs, args.d, V, args.batch_size, args.patience)
-        test_loss, test_mape = test_with_constraints(model, data, adj, Q, args.K, args.lambda1, args.lambda2, args.lambda3, device, args.batch_size)
+        test_loss, test_mape, test_mse = test_with_constraints(model, data, adj, Q, args.K, args.lambda1, args.lambda2, args.lambda3, device, args.batch_size)
     else:
         model = train_wo_constraints(model, data, adj, optimizer, device, args.num_epochs, args.batch_size, args.patience)
-        test_loss, test_mape = test_wo_constraints(model, data, adj, device, args.batch_size)
+        test_loss, test_mape, test_mse = test_wo_constraints(model, data, adj, device, args.batch_size)
 
-    print(f'Test Loss: {test_loss:.4f}, Test MAPE: {test_mape:.4f}')
+    print(f'Test Loss: {test_loss:.4f}, Test MAPE: {test_mape:.4f}, Test MSE: {test_mse:.4f}')
 
 if __name__ == "__main__":
     main()
