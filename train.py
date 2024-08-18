@@ -264,6 +264,7 @@ def main():
  
     args = parser.parse_args()
 
+    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     # Load data
     raw_data = torch.load(args.data_path)
     data = load_data(raw_data, args.metric)['data'].to(device)
@@ -272,7 +273,6 @@ def main():
         args.input_dim = data.x.size(1)
  
     # Initialize the model, criterion, and optimizer
-    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     model = DeepNT(args.input_dim, args.hidden_dim, args.output_dim, args.num_layers, args.num_paths).to(device)
     optimizer = torch.optim.Adam(model.parameters(), lr=args.lr)
 
