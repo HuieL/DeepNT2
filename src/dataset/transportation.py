@@ -165,15 +165,20 @@ def create_embeddings(edges, nodes, embedding_type, embedding_dim, num_walks, wa
 
 def update_graph(graph):
     # Update graphs since the node index is not from 0 in the raw data
-    graph.edge_index = graph.edge_index - 1
+    if graph.edge_index.min() > 0:
+        graph.edge_index = graph.edge_index - graph.edge_index.min()
+    
     for attr in ['node_pair_monitor', 'node_pair_unknown']:
         if hasattr(graph, attr):
-            setattr(graph, attr, {k: v - 1 for k, v in getattr(graph, attr).items()})
+            attr_dict = getattr(graph, attr)
+            min_index = min(v.min().item() for v in attr_dict.values())
+            if min_index > 0:
+                setattr(graph, attr, {k: v - min_index for k, v in attr_dict.items()})
 
     graph.original_node_ids = list(range(1, graph.num_nodes + 1))
     return graph
 
-def create_pyg_graph(edges, edge_attrs, num_nodes, node_embeddings, sampling_rate, seed):
+def create_pyg_graph(edges, edge_attrs, num_nodes, node_embeddings, sampling_rate, seed, max_path_length, max_path_number):
     set_random_seed(seed)
     node_mapping = {node: idx for idx, node in enumerate(range(1, num_nodes + 1))}
     
@@ -182,7 +187,6 @@ def create_pyg_graph(edges, edge_attrs, num_nodes, node_embeddings, sampling_rat
         if node in node_mapping:
             x[node_mapping[node]] = torch.tensor(embedding, dtype=torch.float)
     
-    # Create a NetworkX graph for tomography dataset generation
     G = nx.Graph()
     for edge, capacity, length, flow_time in zip(edges, edge_attrs['capacity'], edge_attrs['length'], edge_attrs['flow_time']):
         G.add_edge(edge[0], edge[1], capacity=capacity, length=length, flow_time=flow_time)
@@ -191,15 +195,11 @@ def create_pyg_graph(edges, edge_attrs, num_nodes, node_embeddings, sampling_rat
     metrics = ['capacity', 'length', 'flow_time']
     measurements_monitor, measurements_unknown, node_pair_monitor, node_pair_unknown, path_attr_monitor, path_attr_unknown = generate_tomography_dataset(G, sampling_rate, metrics, seed)
     
-    # Use graph_to_pyg to convert the graph to PyG format
     data = graph_to_pyg(G, measurements_monitor, measurements_unknown, 
                         node_pair_monitor, node_pair_unknown, 
                         path_attr_monitor, path_attr_unknown)
-    
-    # Add node features
     data.x = x
-    
-    # Add original edge attributes
+
     for attr_name, attr_values in edge_attrs.items():
         setattr(data, f'edge_{attr_name}', torch.tensor(attr_values, dtype=torch.float))
     
@@ -207,14 +207,14 @@ def create_pyg_graph(edges, edge_attrs, num_nodes, node_embeddings, sampling_rat
     
     return data, node_mapping
 
-def tntp_to_pyg(file_path, embedding_type, embedding_dim, num_walks, walk_length, sampling_rate, seed):
+def tntp_to_pyg(file_path, embedding_type, embedding_dim, num_walks, walk_length, sampling_rate, seed, max_path_length, max_path_number):
     set_random_seed(seed)
     edges, edge_attrs, num_nodes, nodes = parse_tntp_file(file_path)
     node_embeddings = create_embeddings(edges, nodes, embedding_type, embedding_dim, num_walks, walk_length, seed)
-    graph, node_mapping = create_pyg_graph(edges, edge_attrs, num_nodes, node_embeddings, sampling_rate, seed)
+    graph, node_mapping = create_pyg_graph(edges, edge_attrs, num_nodes, node_embeddings, sampling_rate, seed, max_path_length, max_path_number)
     return graph, node_mapping
 
-def process_tntp_files(input_folder, output_folder, embedding_type, embedding_dim, num_walks, walk_length, sampling_rate, seed):
+def process_tntp_files(input_folder, output_folder, embedding_type, embedding_dim, num_walks, walk_length, sampling_rate, seed, max_path_length, max_path_number):
     os.makedirs(output_folder, exist_ok=True)
     
     # Get all .tntp files in the input folder
@@ -229,7 +229,7 @@ def process_tntp_files(input_folder, output_folder, embedding_type, embedding_di
         if os.path.exists(output_file):
             print(f"Cached: {output_file}")
             continue
-        graph, _ = tntp_to_pyg(file_path, embedding_type, embedding_dim, num_walks, walk_length, sampling_rate, seed)
+        graph, _ = tntp_to_pyg(file_path, embedding_type, embedding_dim, num_walks, walk_length, sampling_rate, seed, max_path_length, max_path_number)
         
         torch.save(update_graph(graph), output_file)
         print(f"Processed and saved: {output_file}")
