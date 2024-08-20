@@ -106,7 +106,7 @@ def validate_wo_constraints(model, data, adj, device, batch_size):
         for batch_node_pairs, batch_labels in tqdm(dataloader, desc=f"Running validation"):
             batch_node_pairs = batch_node_pairs.to(device)
             batch_labels = batch_labels.to(device)
-            
+
             batch_outputs = model(data.x, batch_node_pairs[:, 0], batch_node_pairs[:, 1], adj)
             
             loss = simplified_loss_function(batch_outputs, batch_labels)
@@ -150,7 +150,7 @@ def train_with_constraints(model, data, adj, optimizer, Q, K, lambda1, lambda2, 
 
     for epoch in range(num_epochs):
         model.train()
-        adj = apply_constraints(adj, d, V)
+        adj = apply_constraints(adj, d, V).to(device)
         total_loss = 0
         total_mape = 0
         total_mse = 0
@@ -192,7 +192,7 @@ def train_with_constraints(model, data, adj, optimizer, Q, K, lambda1, lambda2, 
 def validate_with_constraints(model, data, adj, Q, K, lambda1, lambda2, lambda3, device, batch_size):
     model.eval()
     dataloader = prepare_batches(data, batch_size, data.val_mask, shuffle=False)
-    
+
     total_loss = 0
     total_mape = 0
     total_mse = 0
@@ -206,7 +206,7 @@ def validate_with_constraints(model, data, adj, Q, K, lambda1, lambda2, lambda3,
             batch_outputs = model(data.x, batch_node_pairs[:, 0], batch_node_pairs[:, 1], adj)
             
             loss = contrained_loss_function(batch_outputs, batch_labels, adj, Q, K, lambda1, lambda2, lambda3)
-            
+
             total_loss += loss.item() * len(batch_labels)
             total_mape += mape_calculation(batch_outputs, batch_labels).sum().item()
             total_mse += mse_calculation(batch_outputs, batch_labels).item() * len(batch_labels)
@@ -255,7 +255,7 @@ def main():
     parser.add_argument("--lambda3", type=float, default=1e-1, help="Lambda3 for constraints")
     parser.add_argument("--K", type=int, default=3, help="K value for constraints")
     parser.add_argument("--d", type=int, default=100, help="Sparsity threshold")
-    parser.add_argument("--batch_size", type=int, default=1024, help="Batch size for training and validation")
+    parser.add_argument("--batch_size", type=int, default=512, help="Batch size for training and validation")
     parser.add_argument("--data_path", type=str, required=True, help="Path to the data file")
     parser.add_argument("--metric", type=str, default="delay", help="Metric to use")
     parser.add_argument("--patience", type=int, default=7, help="Patience for early stopping")
@@ -286,7 +286,6 @@ def main():
 
     if args.use_constraints:
         model, adj = train_with_constraints(model, data, adj, optimizer, Q, K, args.lambda1, args.lambda2, args.lambda3, device, args.num_epochs, args.d, V, args.batch_size, args.patience)
-        adj = adj.to(device)
         test_loss, test_mape, test_mse = test_with_constraints(model, data, adj, Q, args.K, args.lambda1, args.lambda2, args.lambda3, device, args.batch_size)
     else:
         model = train_wo_constraints(model, data, adj, optimizer, device, args.num_epochs, args.batch_size, args.patience)
