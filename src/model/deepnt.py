@@ -12,22 +12,17 @@ class DeepNT(nn.Module):
         self.gnn = GCN(input_dim, hidden_dim, output_dim, num_layers)
         self.attention_layer = AttentionLayer(output_dim)
         self.fc = nn.Linear(2 * output_dim, 1)
-
+        
     def forward(self, x, u, v, adj):
         node_embeddings = self.gnn(x, adj)
-        batch_size = u.size(0)
         
-        hu_updated = node_embeddings[u]
-        hv_updated = node_embeddings[v]
-
-        for i in range(batch_size):
-            paths = random_sample_paths(adj, u[i].item(), v[i].item(), self.num_paths, max_attempts=200, max_depth=10)
-            
-            for path in paths:
-                path_embeddings = torch.stack([node_embeddings[node] for node in path])
-                hu_updated[i] = self.attention_layer(hu_updated[i], path_embeddings)
-                hv_updated[i] = self.attention_layer(hv_updated[i], path_embeddings)
-
+        # Batch sample paths
+        paths, path_lengths = batch_random_sample_paths(adj, u, v, self.num_paths)  # Shape: [batch_size, num_paths, path_length]
+        path_embeddings = node_embeddings[paths]  # Shape: [batch_size, num_paths, path_length, embedding_dim]
+        
+        hu_updated = self.attention_layer(node_embeddings[u], path_embeddings, path_lengths)
+        hv_updated = self.attention_layer(node_embeddings[v], path_embeddings, path_lengths)
+        
         concat = torch.cat((hu_updated, hv_updated), dim=-1)
         output = self.fc(concat)
-        return output.squeeze(-1) 
+        return output.squeeze(-1)
