@@ -45,7 +45,7 @@ def edge_masked(edge_index, num_nodes, topology_error_rate, seed=None):
     
     new_edge_list = list(G.edges())
     new_edge_index = torch.tensor(new_edge_list, dtype=torch.long).t()
-    
+
     return new_edge_index
 
 # Randomly sample paths
