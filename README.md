@@ -1,4 +1,4 @@
-# DeepNT2
+# DeepNT
 Data and code for submission of DeepNT: Path-Centric Graph Neural Networks for Network Tomography.
 
 Run code to generate a synthetic graph and try a running Example:
